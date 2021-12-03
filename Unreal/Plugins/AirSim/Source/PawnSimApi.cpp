@@ -362,7 +362,7 @@ PawnSimApi::CollisionInfo PawnSimApi::getCollisionInfo() const
 
 FVector PawnSimApi::getUUPosition() const
 {
-    return params_.pawn->GetActorLocation(); // - state_.mesh_origin
+    return params_.pawn->GetActorLocation(); //-state_.mesh_origin;
 }
 
 FRotator PawnSimApi::getUUOrientation() const
@@ -413,6 +413,14 @@ void PawnSimApi::plot(std::istream& s, FColor color, const Vector3r& offset)
         }
         last_point = current_point;
     }
+}
+
+//parameters in UU frame
+FTransform PawnSimApi::getUUPose() const
+{
+    FTransform transform;
+    transform.SetComponents(getUUOrientation().Quaternion(), getUUPosition(), FVector(1, 1, 1));
+    return transform;
 }
 
 //parameters in NED frame
@@ -540,7 +548,6 @@ msr::airlib::Environment* PawnSimApi::getEnvironment()
 {
     return environment_.get();
 }
-
 std::string PawnSimApi::getRecordFileLine(bool is_header_line) const
 {
     if (is_header_line) {

@@ -187,31 +187,37 @@ void UManualPoseController::inputManualDown(float val)
 }
 void UManualPoseController::inputManualLeftYaw(float val)
 {
+    val /= rotation_scaler;
     if (!FMath::IsNearlyEqual(val, 0.f))
         delta_rotation_.Add(0, -val, 0);
 }
 void UManualPoseController::inputManualRightYaw(float val)
 {
+    val /= rotation_scaler;
     if (!FMath::IsNearlyEqual(val, 0.f))
         delta_rotation_.Add(0, val, 0);
 }
 void UManualPoseController::inputManualLeftRoll(float val)
 {
+    val /= rotation_scaler;
     if (!FMath::IsNearlyEqual(val, 0.f))
         delta_rotation_.Add(0, 0, -val);
 }
 void UManualPoseController::inputManualRightRoll(float val)
 {
+    val /= rotation_scaler;
     if (!FMath::IsNearlyEqual(val, 0.f))
         delta_rotation_.Add(0, 0, val);
 }
 void UManualPoseController::inputManualUpPitch(float val)
 {
+    val /= rotation_scaler;
     if (!FMath::IsNearlyEqual(val, 0.f))
         delta_rotation_.Add(val, 0, 0);
 }
 void UManualPoseController::inputManualDownPitch(float val)
 {
+    val /= rotation_scaler;
     if (!FMath::IsNearlyEqual(val, 0.f))
         delta_rotation_.Add(-val, 0, 0);
 }

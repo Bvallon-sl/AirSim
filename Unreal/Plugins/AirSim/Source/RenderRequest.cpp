@@ -74,22 +74,22 @@ void RenderRequest::getScreenshot(std::shared_ptr<RenderParams> params[], std::v
                 // execute *immediately* after RenderThread renders the scene!
                 RenderRequest* This = this;
                 ENQUEUE_RENDER_COMMAND(SceneDrawCompletion)
-                (
-                    [This](FRHICommandListImmediate& RHICmdList) {
-                        This->ExecuteTask();
-                    });
+                    (
+                        [This](FRHICommandListImmediate& RHICmdList) {
+                            This->ExecuteTask();
+                        });
 
                 game_viewport_->bDisableWorldRendering = saved_DisableWorldRendering_;
 
                 assert(end_draw_handle_.IsValid());
                 game_viewport_->OnEndDraw().Remove(end_draw_handle_);
-            });
+                });
 
             // while we're still on GameThread, enqueue request for capture the scene!
             for (unsigned int i = 0; i < req_size_; ++i) {
                 params_[i]->render_component->CaptureSceneDeferred();
             }
-        });
+            });
 
         // wait for this task to complete
         while (!wait_signal_->waitFor(5)) {

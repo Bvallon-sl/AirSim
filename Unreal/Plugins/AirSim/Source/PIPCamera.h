@@ -55,6 +55,7 @@ public:
     UDetectionComponent* getDetectionComponent(const ImageType type, bool if_active) const;
 
     msr::airlib::Pose getPose() const;
+    FTransform getUUPose() const;
 
 private: //members
     UPROPERTY()

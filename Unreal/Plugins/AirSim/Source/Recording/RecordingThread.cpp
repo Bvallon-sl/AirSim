@@ -12,17 +12,23 @@ std::unique_ptr<FRecordingThread> FRecordingThread::finishing_instance_;
 msr::airlib::WorkerThreadSignal FRecordingThread::finishing_signal_;
 bool FRecordingThread::first_ = true;
 
+WorldSimApi* FRecordingThread::world_sim_api_ = nullptr;
+
 FRecordingThread::FRecordingThread()
-    : stop_task_counter_(0), recording_file_(nullptr), is_ready_(false)
+    : stop_task_counter_(0), /* recording_file_(nullptr),*/ is_ready_(false)
 {
+    counter = 0;
+    for (auto& it : recording_files_) {
+        it.second = nullptr;
+    }
     thread_.reset(FRunnableThread::Create(this, TEXT("FRecordingThread"), 0, TPri_BelowNormal)); // Windows default, possible to specify more priority
 }
 
-void FRecordingThread::startRecording(const RecordingSetting& settings,
+void FRecordingThread::startRecording(WorldSimApi* world_sim_api, const RecordingSetting& settings,
                                       const common_utils::UniqueValueMap<std::string, VehicleSimApiBase*>& vehicle_sim_apis)
 {
     stopRecording();
-
+    world_sim_api_ = world_sim_api;
     //TODO: check FPlatformProcess::SupportsMultithreading()?
     assert(!isRecording());
 
@@ -30,18 +36,35 @@ void FRecordingThread::startRecording(const RecordingSetting& settings,
     running_instance_->settings_ = settings;
     running_instance_->vehicle_sim_apis_ = vehicle_sim_apis;
 
+    world_sim_api_->setSegmentationObjectID("[\\w\\W]*", 255, true);
+
+    int i = 1;
+    // create mask
+    while (world_sim_api_->setSegmentationObjectID("person_" + std::to_string(i), i)) {
+        i++;
+    }
+
+    int64 sequence_id = IS_MICROSECONDS == true ? (msr::airlib::ClockFactory::get()->nowNanos() / 1000) : msr::airlib::ClockFactory::get()->nowNanos();
+
     for (const auto& vehicle_sim_api : vehicle_sim_apis) {
         auto vehicle_name = vehicle_sim_api->getVehicleName();
 
         running_instance_->image_captures_[vehicle_name] = vehicle_sim_api->getImageCapture();
         running_instance_->last_poses_[vehicle_name] = msr::airlib::Pose();
+
+        CameraDetails camera_details("Left", vehicle_name, false);
+        world_sim_api_->setDetectionFilterRadius(msr::airlib::ImageCaptureBase::ImageType::Scene, MAX_DISTANCE_METER * 100, camera_details);
+        world_sim_api->addDetectionFilterMeshName(msr::airlib::ImageCaptureBase::ImageType::Scene, "person_*", camera_details);
+
+        running_instance_->recording_files_.insert(std::pair<std::string, std::unique_ptr<RecordingFile>>(vehicle_name, std::make_unique<RecordingFile>()));
+        running_instance_->recording_files_.at(vehicle_name)->startRecording(vehicle_sim_api, sequence_id, settings.folder);
     }
 
     running_instance_->last_screenshot_on_ = 0;
 
-    running_instance_->recording_file_.reset(new RecordingFile());
+    //running_instance_->recording_file_.reset(new RecordingFile());
     // Just need any 1 instance, to set the header line of the record file
-    running_instance_->recording_file_->startRecording(*(vehicle_sim_apis.begin()), settings.folder);
+    //running_instance_->recording_file_->startRecording(*(vehicle_sim_apis.begin()), settings.folder);
 
     // Set is_ready at the end, setting this before can cause a race when the file isn't open yet
     running_instance_->is_ready_ = true;
@@ -84,6 +107,56 @@ void FRecordingThread::killRecording()
     }
 }
 
+//create multicamera json  based on each single cam data
+void FRecordingThread::createMulticamJsonFile(std::vector<FJsonDataSet> data, std::string folder_path)
+{
+
+    std::string log_filepath = common_utils::FileSystem::getLogFileNamePath(folder_path, "../multicam_data", "", ".json", false);
+
+    FJsonDataSet multicam_file;
+
+    if (data.size() > 0) {
+
+        multicam_file.Metadata = data[0].Metadata;
+
+        TArray<int> detected_ids;
+        for (int i = 0; i < data[0].Frames.Num(); i++) { //assuming all gt have the same number of frame
+            detected_ids.Reset();
+
+            FJsonFrameData fusedFrame;
+            fusedFrame.EpochTimeStamp = data[0].Frames[i].EpochTimeStamp;
+            fusedFrame.FrameIndex = data[0].Frames[i].FrameIndex;
+            fusedFrame.ImageFileName = data[0].Frames[i].ImageFileName;
+
+            FJsonFrameDetections fusedFrameDetection;
+            for (FJsonDataSet dataset : data) {
+                for (FJsonSingleDetection singleDetection : dataset.Frames[i].Detections.ObjectDetections) {
+                    if (!detected_ids.Contains(singleDetection.ObjectID)) {
+                        FJsonSingleDetection fusedFrameSingleDetection;
+                        fusedFrameSingleDetection.ObjectID = singleDetection.ObjectID;
+                        fusedFrameSingleDetection.ObjectType = singleDetection.ObjectType;
+                        fusedFrameSingleDetection.Skeleton3D_Camera_Raw = singleDetection.Skeleton3D_Camera_Raw;
+
+                        fusedFrameDetection.ObjectDetections.Add(fusedFrameSingleDetection);
+
+                        detected_ids.Add(singleDetection.ObjectID);
+                    }
+                }
+            }
+
+            fusedFrame.Detections = fusedFrameDetection;
+        }
+
+        IPlatformFile& platform_file = FPlatformFileManager::Get().GetPlatformFile();
+        IFileHandle* log_file_handle_ = platform_file.OpenWrite(*FString(log_filepath.c_str()));
+        FString line_f(std::string(TCHAR_TO_UTF8(*SerializeJson(multicam_file))).c_str());
+        log_file_handle_->Write((const uint8*)TCHAR_TO_ANSI(*line_f), line_f.Len());
+
+        delete log_file_handle_;
+        log_file_handle_ = nullptr;
+    }
+}
+
 /*********************** methods for instance **************************************/
 
 bool FRecordingThread::Init()
@@ -94,8 +167,12 @@ bool FRecordingThread::Init()
     else {
         finishing_signal_.wait();
     }
-    if (recording_file_) {
+    /* if (recording_file_) {
         UAirBlueprintLib::LogMessage(TEXT("Initiated recording thread"), TEXT(""), LogDebugLevel::Success);
+    }*/
+    for (const auto& vehicle_sim_api : vehicle_sim_apis_) {
+        const auto& vehicle_name = vehicle_sim_api->getVehicleName();
+        if (recording_files_.at(vehicle_name)) UAirBlueprintLib::LogMessage(TEXT("Initiated recording thread"), TEXT(""), LogDebugLevel::Success);
     }
     return true;
 }
@@ -106,30 +183,60 @@ uint32 FRecordingThread::Run()
         //make sure all vars are set up
         if (is_ready_) {
             bool interval_elapsed = msr::airlib::ClockFactory::get()->elapsedSince(last_screenshot_on_) > settings_.record_interval;
-
             if (interval_elapsed) {
                 last_screenshot_on_ = msr::airlib::ClockFactory::get()->nowNanos();
 
+                world_sim_api_->pause(true);
                 for (const auto& vehicle_sim_api : vehicle_sim_apis_) {
                     const auto& vehicle_name = vehicle_sim_api->getVehicleName();
-
-                    const auto* kinematics = vehicle_sim_api->getGroundTruthKinematics();
-                    bool is_pose_unequal = kinematics && last_poses_[vehicle_name] != kinematics->pose;
+                    //UE_LOG(LogTemp, Warning, TEXT("vehicule  : %s"), *vehicle_name);
+                    //const auto* kinematics = vehicle_sim_api->getGroundTruthKinematics();
+                    bool is_pose_unequal = true; //kinematics&& last_poses_[vehicle_name] != kinematics->pose;
 
                     if (!settings_.record_on_move || is_pose_unequal) {
-                        last_poses_[vehicle_name] = kinematics->pose;
+                        //last_poses_[vehicle_name] = kinematics->pose;
 
                         std::vector<ImageCaptureBase::ImageResponse> responses;
+                        //responses.resize(settings_.requests[vehicle_name].size());
 
                         image_captures_[vehicle_name]->getImages(settings_.requests[vehicle_name], responses);
-                        recording_file_->appendRecord(responses, vehicle_sim_api);
+                        //recording_file_->appendRecord(responses, vehicle_sim_api);
+                        CameraDetails camera_details("Left", vehicle_name, false);
+                        detections_[vehicle_name] = world_sim_api_->getDetections_UU(msr::airlib::ImageCaptureBase::ImageType::Scene, camera_details);
+                        if (counter > nb_frames_before_log) {
+                            recording_files_.at(vehicle_name)->appendRecord(responses, detections_[vehicle_name], vehicle_sim_api, last_screenshot_on_);
+                        }
                     }
                 }
+                world_sim_api_->pause(false);
+                //UE_LOG(LogTemp, Warning, TEXT("Processing time for 1 frame with %d vehicles : %f"), vehicle_sim_apis_.mapSize(), msr::airlib::ClockFactory::get()->elapsedSince(last_screenshot_on_));
+
+                UAirBlueprintLib::LogMessageString("time : ",
+                                                   Utils::stringf("%f", msr::airlib::ClockFactory::get()->elapsedSince(last_screenshot_on_), ClockFactory::get()->getTrueScaleWrtWallClock()),
+                                                   LogDebugLevel::Informational);
+                counter++;
             }
         }
     }
 
-    recording_file_.reset();
+
+	std::vector<FJsonDataSet> datasets;
+    std::string folder_path;
+	for (const auto& recording_file : recording_files_) {
+            datasets.push_back(recording_file.second->getDataSet());
+
+            folder_path = recording_file.second->getImagePath();
+	}
+    
+    createMulticamJsonFile(datasets, folder_path);
+
+    //recording_file_.reset();
+    for (const auto& vehicle_sim_api : vehicle_sim_apis_)
+    {
+        const auto& vehicle_name = vehicle_sim_api->getVehicleName();
+
+        recording_files_.at(vehicle_name).reset();
+    }
 
     return 0;
 }
@@ -142,7 +249,13 @@ void FRecordingThread::Stop()
 void FRecordingThread::Exit()
 {
     assert(this == finishing_instance_.get());
-    if (recording_file_)
-        recording_file_.reset();
+    /* if (recording_file_)
+        recording_file_.reset();*/
+
+    for (const auto& vehicle_sim_api : vehicle_sim_apis_) {
+        const auto& vehicle_name = vehicle_sim_api->getVehicleName();
+        if (recording_files_.at(vehicle_name)) recording_files_.at(vehicle_name).reset();
+    }
+
     finishing_signal_.signal();
 }

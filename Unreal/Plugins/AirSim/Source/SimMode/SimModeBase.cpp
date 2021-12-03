@@ -503,7 +503,7 @@ void ASimModeBase::stopRecording()
 
 void ASimModeBase::startRecording()
 {
-    FRecordingThread::startRecording(getSettings().recording_setting, getApiProvider()->getVehicleSimApis());
+    FRecordingThread::startRecording(static_cast<WorldSimApi*>(this->world_sim_api_.get()), getSettings().recording_setting, getApiProvider()->getVehicleSimApis());
 }
 
 bool ASimModeBase::isRecording() const

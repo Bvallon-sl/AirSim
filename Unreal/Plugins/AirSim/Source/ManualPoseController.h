@@ -56,7 +56,7 @@ private:
 
     AActor* actor_;
 
-    float acceleration_ = 0, speed_scaler_ = 1000;
+    float acceleration_ = 0, speed_scaler_ = 100, rotation_scaler = 3;
     FVector input_positive_, inpute_negative_;
     FVector last_velocity_;
 };

@@ -6,6 +6,11 @@ using System.IO;
 
 public class AirSim : ModuleRules
 {
+    private string ThirdPartyPath
+    {
+        get { return Path.GetFullPath(Path.Combine(ModuleDirectory, "../ThirdParty/")); }
+    }
+
     private string ModulePath
     {
         get { return ModuleDirectory; }
@@ -78,7 +83,7 @@ public class AirSim : ModuleRules
 
         bEnableExceptions = true;
 
-        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "ImageWrapper", "RenderCore", "RHI", "AssetRegistry", "PhysicsCore", "PhysXVehicles", "PhysXVehicleLib", "PhysX", "APEX", "Landscape" });
+        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "ImageWrapper", "RenderCore", "RHI", "AssetRegistry", "PhysicsCore", "PhysXVehicles", "PhysXVehicleLib", "PhysX", "APEX", "Landscape", "Json", "JsonUtilities"});
         PrivateDependencyModuleNames.AddRange(new string[] { "UMG", "Slate", "SlateCore" });
 
         //suppress VC++ proprietary warnings
@@ -91,6 +96,7 @@ public class AirSim : ModuleRules
         AddOSLibDependencies(Target);
 
         SetupCompileMode(CompileMode.HeaderOnlyWithRpc, Target);
+        LoadOpenCV(Target);
     }
 
     private void AddOSLibDependencies(ReadOnlyTargetRules Target)
@@ -153,6 +159,45 @@ public class AirSim : ModuleRules
             PublicIncludePaths.Add(Path.Combine(AirLibPath, "deps", LibName, "include"));
         }
         PublicDefinitions.Add(string.Format("WITH_" + LibName.ToUpper() + "_BINDING={0}", isLibrarySupported ? 1 : 0));
+
+        return isLibrarySupported;
+    }
+
+    public bool LoadOpenCV(ReadOnlyTargetRules Target)
+    {
+        // Start OpenCV linking here!
+        bool isLibrarySupported = false;
+
+        // Create OpenCV Path
+        string OpenCVPath = Path.Combine(ThirdPartyPath, "OpenCV");
+
+        // Get Library Path
+        string LibPath = "";
+        if (Target.Platform == UnrealTargetPlatform.Win64)
+        {
+            LibPath = Path.Combine(OpenCVPath, "Libraries", "Win64");
+            isLibrarySupported = true;
+        }
+        else
+        {
+            string Err = string.Format("{0} dedicated server is made to depend on {1}. We want to avoid this, please correct module dependencies.", Target.Platform.ToString(), this.ToString()); System.Console.WriteLine(Err);
+        }
+
+        if (isLibrarySupported)
+        {
+            //Add Include path
+            PublicIncludePaths.AddRange(new string[] { Path.Combine(OpenCVPath, "Includes") });
+
+
+            //Add Static Libraries
+            PublicAdditionalLibraries.Add(LibPath + "/opencv_world451.lib");
+
+            //Add Dynamic Libraries
+            PublicDelayLoadDLLs.Add("opencv_world451.dll");
+            PublicDelayLoadDLLs.Add("opencv_videoio_ffmpeg451_64.dll");
+        }
+
+        PublicDefinitions.Add(string.Format("WITH_OPENCV_BINDING={0}", isLibrarySupported ? 1 : 0));
 
         return isLibrarySupported;
     }

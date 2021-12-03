@@ -77,6 +77,7 @@ public: //implementation of VehicleSimApiBase
 
     virtual const UnrealImageCapture* getImageCapture() const override;
     virtual Pose getPose() const override;
+    virtual FTransform getUUPose() const override;
     virtual void setPose(const Pose& pose, bool ignore_collision) override;
 
     virtual CollisionInfo getCollisionInfo() const override;

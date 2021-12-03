@@ -27,7 +27,48 @@ void UnrealImageCapture::getImages(const std::vector<msr::airlib::ImageCaptureBa
     }
     else
         getSceneCaptureImage(requests, responses, false);
+    
+    //for (int i = 0; i < requests.size() && i < responses.size(); ++i)
+    //    getImage(requests[i], responses[i]);
 }
+
+/*void UnrealImageCapture::getImage(const msr::airlib::ImageCaptureBase::ImageRequest& request, msr::airlib::ImageCaptureBase::ImageResponse& response) const
+{
+    getSceneCaptureImage(request.camera_name, request.image_type, response);
+}
+
+void UnrealImageCapture::getSceneCaptureImage(const std::string& camera_name, msr::airlib::ImageCaptureBase::ImageType image_type, msr::airlib::ImageCaptureBase::ImageResponse& response) const
+{
+    FString fcam_name(camera_name.c_str());
+    APIPCamera* camera = cameras_->at(camera_name);
+    camera->setCameraTypeEnabled(image_type, true);
+
+    USceneCaptureComponent2D* capture = camera->getCaptureComponent(image_type, false);
+    UTextureRenderTarget2D* textureTarget = capture->TextureTarget;
+
+    RenderRequest render_request(BufferPool_, BufferPool_float_);
+    render_request.fast_param_ = RenderRequest::RenderParams{ capture, textureTarget, false, false };
+    render_request.FastScreenshot();
+
+    response.camera_name = camera_name;
+    response.time_stamp = render_request.latest_result_.time_stamp;
+    response.width = render_request.latest_result_.width;
+    response.height = render_request.latest_result_.height;
+    response.image_type = image_type;
+    response.pixels_as_float = render_request.latest_result_.pixels_as_float;
+
+    if (!response.pixels_as_float)
+        response.image_data_uint8 = std::move(render_request.latest_result_.pixels);
+    else
+        response.image_data_float = std::move(render_request.latest_result_.pixels_float);
+
+    UE_LOG(LogTemp, Warning, TEXT("%s: stats: H: %d  W: %d  type: %d  px_format: %d"),
+        *fcam_name, response.height, response.width, image_type, textureTarget->GetFormat());
+
+    // Disable camera after capturing image, this reduces resource consumption when images are not being taken
+    // Particulary when a high-resolution camera is used occasionally
+    // camera->setCameraTypeEnabled(image_type, false);
+}*/
 
 void UnrealImageCapture::getSceneCaptureImage(const std::vector<msr::airlib::ImageCaptureBase::ImageRequest>& requests,
                                               std::vector<msr::airlib::ImageCaptureBase::ImageResponse>& responses, bool use_safe_method) const
@@ -82,9 +123,9 @@ void UnrealImageCapture::getSceneCaptureImage(const std::vector<msr::airlib::Ima
             const ImageRequest& request = requests.at(i);
             APIPCamera* camera = cameras_->at(request.camera_name);
             ImageResponse& response = responses.at(i);
-            auto camera_pose = camera->getPose();
-            response.camera_position = camera_pose.position;
-            response.camera_orientation = camera_pose.orientation;
+            auto camera_pose = camera->getUUPose();
+            response.camera_position = camera_pose.GetLocation();
+            response.camera_orientation = camera_pose.GetRotation();
         }
     };
     RenderRequest render_request{ gameViewport, std::move(query_camera_pose_cb) };
@@ -103,9 +144,9 @@ void UnrealImageCapture::getSceneCaptureImage(const std::vector<msr::airlib::Ima
         if (use_safe_method) {
             // Currently, we don't have a way to synthronize image capturing and camera pose when safe method is used,
             APIPCamera* camera = cameras_->at(request.camera_name);
-            msr::airlib::Pose pose = camera->getPose();
-            response.camera_position = pose.position;
-            response.camera_orientation = pose.orientation;
+            auto camera_pose = camera->getUUPose();
+            response.camera_position = camera_pose.GetLocation();
+            response.camera_orientation = camera_pose.GetRotation();
         }
         response.pixels_as_float = request.pixels_as_float;
         response.compress = request.compress;

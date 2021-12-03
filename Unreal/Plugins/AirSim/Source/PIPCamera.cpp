@@ -422,6 +422,11 @@ msr::airlib::Pose APIPCamera::getPose() const
     return ned_transform_->toLocalNed(this->GetActorTransform());
 }
 
+FTransform APIPCamera::getUUPose() const
+{
+    return this->GetActorTransform();
+}
+
 void APIPCamera::updateCameraPostProcessingSetting(FPostProcessSettings& obj, const CaptureSetting& setting)
 {
     if (!std::isnan(setting.motion_blur_amount)) {

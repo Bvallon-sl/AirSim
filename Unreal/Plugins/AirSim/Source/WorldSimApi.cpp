@@ -235,6 +235,7 @@ void WorldSimApi::reset()
 
 void WorldSimApi::pause(bool is_paused)
 {
+    UGameplayStatics::SetGamePaused(simmode_->GetWorld(), is_paused);
     simmode_->pause(is_paused);
 }
 
@@ -475,6 +476,25 @@ void WorldSimApi::simPlotLineStrip(const std::vector<Vector3r>& points, const st
         }
     },
                                              true);
+}
+
+void WorldSimApi::simPlotLineStrip(const std::vector<FVector>& points, const std::vector<float>& color_rgba, float thickness, float duration, bool is_persistent)
+{
+    FColor color = FLinearColor{ color_rgba[0], color_rgba[1], color_rgba[2], color_rgba[3] }.ToFColor(true);
+
+    UAirBlueprintLib::RunCommandOnGameThread([this, &points, &color, thickness, duration, is_persistent]() {
+        for (size_t idx = 0; idx != points.size() - 1; ++idx) {
+            DrawDebugLine(simmode_->GetWorld(),
+                points[idx],
+                points[idx + 1],
+                color,
+                is_persistent,
+                duration,
+                0,
+                thickness);
+        }
+        },
+        true);
 }
 
 // plot line for points 0-1, 2-3, 4-5... must be even number of points
@@ -806,6 +826,17 @@ std::vector<uint8_t> WorldSimApi::getImage(ImageCaptureBase::ImageType image_typ
         return std::vector<uint8_t>();
 }
 
+/*void WorldSimApi::getImage(const ImageCaptureBase::ImageRequest& request, ImageCaptureBase::ImageResponse& response) const
+{
+    simmode_->getImageCapture()->getImage(request, response);
+}
+
+void WorldSimApi::getImages(const std::vector<ImageCaptureBase::ImageRequest>& requests, std::vector<ImageCaptureBase::ImageResponse>& responses) const
+{
+    for (int i = 0; i < requests.size() && i < responses.size(); ++i)
+        getImage(requests[i], responses[i]);
+}*/
+
 void WorldSimApi::addDetectionFilterMeshName(ImageCaptureBase::ImageType image_type, const std::string& mesh_name, const CameraDetails& camera_details)
 {
     const APIPCamera* camera = simmode_->getCamera(camera_details);
@@ -869,6 +900,42 @@ std::vector<msr::airlib::DetectionInfo> WorldSimApi::getDetections(ImageCaptureB
         }
     },
                                              true);
+    return result;
+}
 
+
+std::vector<msr::airlib::DetectionInfo_UU> WorldSimApi::getDetections_UU(ImageCaptureBase::ImageType image_type, const CameraDetails& camera_details)
+{
+    std::vector<msr::airlib::DetectionInfo_UU> result;
+
+    const APIPCamera* camera = simmode_->getCamera(camera_details);
+    const FTransform& ned_transform = camera_details.external
+        ? simmode_->getGlobalNedTransform().getGlobalTransform()
+        : simmode_->getVehicleSimApi(camera_details.vehicle_name)->getUUPose();
+
+    UAirBlueprintLib::RunCommandOnGameThread([camera, image_type, &result, &ned_transform]() {
+        const TArray<FDetectionInfo>& detections = camera->getDetectionComponent(image_type, false)->getDetections();
+        result.resize(detections.Num());
+
+        for (int i = 0; i < detections.Num(); i++) {
+            result[i].name = std::string(TCHAR_TO_UTF8(*(detections[i].Actor->GetFName().ToString())));
+
+            FVector nedWrtOrigin = detections[i].Actor->GetActorLocation();
+
+            AActor* actor_ptr = detections[i].Actor;
+            result[i].skeletal_mesh = actor_ptr->FindComponentByClass<USkeletalMeshComponent>();
+            result[i].orientation = actor_ptr->GetActorRotation().Quaternion();
+            
+            result[i].box2D.min = detections[i].Box2D.Min;
+            result[i].box2D.max = detections[i].Box2D.Max;
+
+            result[i].box3D.min = detections[i].Box3D.Min;
+            result[i].box3D.max = detections[i].Box3D.Max;
+
+            result[i].relative_transform = detections[i].RelativeTransform;
+            //result[i].relative_transform = FTransform(detections[i].Actor->GetActorQuat(), detections[i].Actor->GetActorLocation(), FVector::OneVector);
+        }
+        },
+        true);
     return result;
 }

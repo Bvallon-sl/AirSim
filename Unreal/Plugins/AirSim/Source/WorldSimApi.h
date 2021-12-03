@@ -60,6 +60,7 @@ public:
     virtual void simPlotPoints(const std::vector<Vector3r>& points, const std::vector<float>& color_rgba, float size, float duration, bool is_persistent) override;
     virtual void simPlotLineStrip(const std::vector<Vector3r>& points, const std::vector<float>& color_rgba, float thickness, float duration, bool is_persistent) override;
     virtual void simPlotLineList(const std::vector<Vector3r>& points, const std::vector<float>& color_rgba, float thickness, float duration, bool is_persistent) override;
+    virtual void simPlotLineStrip(const std::vector<FVector>& points, const std::vector<float>& color_rgba, float thickness, float duration, bool is_persistent) override;
     virtual void simPlotArrows(const std::vector<Vector3r>& points_start, const std::vector<Vector3r>& points_end, const std::vector<float>& color_rgba, float thickness, float arrow_size, float duration, bool is_persistent) override;
     virtual void simPlotStrings(const std::vector<std::string>& strings, const std::vector<Vector3r>& positions, float scale, const std::vector<float>& color_rgba, float duration) override;
     virtual void simPlotTransforms(const std::vector<Pose>& poses, float scale, float thickness, float duration, bool is_persistent) override;
@@ -88,13 +89,17 @@ public:
     virtual std::vector<float> getDistortionParams(const CameraDetails& camera_details) const override;
 
     virtual std::vector<ImageCaptureBase::ImageResponse> getImages(const std::vector<ImageCaptureBase::ImageRequest>& requests,
-                                                                   const std::string& vehicle_name, bool external) const override;
+        const std::string& vehicle_name, bool external) const override;
     virtual std::vector<uint8_t> getImage(ImageCaptureBase::ImageType image_type, const CameraDetails& camera_details) const override;
+
+    //virtual void getImages(const std::vector<ImageCaptureBase::ImageRequest>& request, std::vector<ImageCaptureBase::ImageResponse>& responses) const override;
+    //virtual void getImage(const ImageCaptureBase::ImageRequest& request, ImageCaptureBase::ImageResponse& response) const override;
 
     virtual void addDetectionFilterMeshName(ImageCaptureBase::ImageType image_type, const std::string& mesh_name, const CameraDetails& camera_details) override;
     virtual void setDetectionFilterRadius(ImageCaptureBase::ImageType image_type, float radius_cm, const CameraDetails& camera_details) override;
     virtual void clearDetectionMeshNames(ImageCaptureBase::ImageType image_type, const CameraDetails& camera_details) override;
     virtual std::vector<msr::airlib::DetectionInfo> getDetections(ImageCaptureBase::ImageType image_type, const CameraDetails& camera_details) override;
+    virtual std::vector<msr::airlib::DetectionInfo_UU> getDetections_UU(ImageCaptureBase::ImageType image_type, const CameraDetails& camera_details) override; // same function but result is in unreal units
 
 private:
     AActor* createNewActor(const FActorSpawnParameters& spawn_params, const FTransform& actor_transform, const Vector3r& scale, UStaticMesh* static_mesh);

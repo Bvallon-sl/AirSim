@@ -23,8 +23,7 @@ def generate_color_palette(numPixelsWide, outputFile):
 
     for i in range(3):
         for j in range(1, 255):
-            choice = random.sample(possibilities[i], 1)[0]
-            possibilities[i].remove(choice)
+            choice = j
             palette[0, j * numPixelsWide : (j + 1) * numPixelsWide, i] = choice
             colors[j][i] = choice
 
