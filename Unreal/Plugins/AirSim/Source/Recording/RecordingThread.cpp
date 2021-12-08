@@ -123,6 +123,7 @@ void FRecordingThread::createMulticamJsonFile(std::vector<FJsonDataSet> data, st
         for (int i = 0; i < data[0].Frames.Num(); i++) { //assuming all gt have the same number of frame
             detected_ids.Reset();
 
+
             FJsonFrameData fusedFrame;
             fusedFrame.EpochTimeStamp = data[0].Frames[i].EpochTimeStamp;
             fusedFrame.FrameIndex = data[0].Frames[i].FrameIndex;
@@ -130,12 +131,21 @@ void FRecordingThread::createMulticamJsonFile(std::vector<FJsonDataSet> data, st
 
             FJsonFrameDetections fusedFrameDetection;
             for (FJsonDataSet dataset : data) {
+                UE_LOG(LogTemp, Warning, TEXT("toto"));
                 for (FJsonSingleDetection singleDetection : dataset.Frames[i].Detections.ObjectDetections) {
                     if (!detected_ids.Contains(singleDetection.ObjectID)) {
                         FJsonSingleDetection fusedFrameSingleDetection;
                         fusedFrameSingleDetection.ObjectID = singleDetection.ObjectID;
                         fusedFrameSingleDetection.ObjectType = singleDetection.ObjectType;
-                        fusedFrameSingleDetection.Skeleton3D_Camera_Raw = singleDetection.Skeleton3D_Camera_Raw;
+                        
+                        fusedFrameSingleDetection.Skeleton3D_Camera_Raw.global_root_orientation = camToWorld(dataset.Frames[i].TrackedPose.WorldPose.toTransform(), singleDetection.Skeleton3D_Camera_Raw.global_root_orientation);
+                                                
+                        for (int idx = 0; idx < (int)BODY_PARTS_POSE_34::LAST; idx++) {
+                            
+                            fusedFrameSingleDetection.Skeleton3D_Camera_Raw.keypoints.Add(camToWorld(dataset.Frames[i].TrackedPose.WorldPose.toTransform(), singleDetection.Skeleton3D_Camera_Raw.keypoints[idx]));
+                            fusedFrameSingleDetection.Skeleton3D_Camera_Raw.local_position_per_joint.Add(camToWorld(dataset.Frames[i].TrackedPose.WorldPose.toTransform(), singleDetection.Skeleton3D_Camera_Raw.local_position_per_joint[idx]));
+                            fusedFrameSingleDetection.Skeleton3D_Camera_Raw.local_orientation_per_joint.Add(camToWorld(dataset.Frames[i].TrackedPose.WorldPose.toTransform(), singleDetection.Skeleton3D_Camera_Raw.local_orientation_per_joint[idx]));   
+                        }
 
                         fusedFrameDetection.ObjectDetections.Add(fusedFrameSingleDetection);
 
@@ -145,7 +155,11 @@ void FRecordingThread::createMulticamJsonFile(std::vector<FJsonDataSet> data, st
             }
 
             fusedFrame.Detections = fusedFrameDetection;
+
+            multicam_file.Frames.Add(fusedFrame);
         }
+
+
 
         IPlatformFile& platform_file = FPlatformFileManager::Get().GetPlatformFile();
         IFileHandle* log_file_handle_ = platform_file.OpenWrite(*FString(log_filepath.c_str()));
@@ -189,28 +203,22 @@ uint32 FRecordingThread::Run()
                 world_sim_api_->pause(true);
                 for (const auto& vehicle_sim_api : vehicle_sim_apis_) {
                     const auto& vehicle_name = vehicle_sim_api->getVehicleName();
-                    //UE_LOG(LogTemp, Warning, TEXT("vehicule  : %s"), *vehicle_name);
-                    //const auto* kinematics = vehicle_sim_api->getGroundTruthKinematics();
-                    bool is_pose_unequal = true; //kinematics&& last_poses_[vehicle_name] != kinematics->pose;
+                    FString string(vehicle_name.c_str());
 
-                    if (!settings_.record_on_move || is_pose_unequal) {
-                        //last_poses_[vehicle_name] = kinematics->pose;
+                    if (!settings_.record_on_move) {
 
                         std::vector<ImageCaptureBase::ImageResponse> responses;
-                        //responses.resize(settings_.requests[vehicle_name].size());
 
                         image_captures_[vehicle_name]->getImages(settings_.requests[vehicle_name], responses);
-                        //recording_file_->appendRecord(responses, vehicle_sim_api);
                         CameraDetails camera_details("Left", vehicle_name, false);
                         detections_[vehicle_name] = world_sim_api_->getDetections_UU(msr::airlib::ImageCaptureBase::ImageType::Scene, camera_details);
+
                         if (counter > nb_frames_before_log) {
                             recording_files_.at(vehicle_name)->appendRecord(responses, detections_[vehicle_name], vehicle_sim_api, last_screenshot_on_);
                         }
                     }
                 }
                 world_sim_api_->pause(false);
-                //UE_LOG(LogTemp, Warning, TEXT("Processing time for 1 frame with %d vehicles : %f"), vehicle_sim_apis_.mapSize(), msr::airlib::ClockFactory::get()->elapsedSince(last_screenshot_on_));
-
                 UAirBlueprintLib::LogMessageString("time : ",
                                                    Utils::stringf("%f", msr::airlib::ClockFactory::get()->elapsedSince(last_screenshot_on_), ClockFactory::get()->getTrueScaleWrtWallClock()),
                                                    LogDebugLevel::Informational);

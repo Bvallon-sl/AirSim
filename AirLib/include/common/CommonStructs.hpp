@@ -318,6 +318,55 @@ namespace airlib
         }
     };
 
+        struct Box2D_UU
+    {
+        FVector2D min;
+        FVector2D max;
+
+        Box2D_UU()
+        {
+        }
+
+        Box2D_UU(FVector2D min_val, FVector2D max_val)
+            : min(min_val), max(max_val)
+        {
+        }
+    };
+
+    struct Box3D_UU
+    {
+        FVector min;
+        FVector max;
+
+        Box3D_UU()
+        {
+        }
+
+        Box3D_UU(FVector min_val, FVector max_val)
+            : min(min_val), max(max_val)
+        {
+        }
+    };
+
+    struct DetectionInfo_UU
+    {
+        std::string name = "";
+        Box2D_UU box2D = Box2D_UU();
+        Box3D_UU box3D = Box3D_UU();
+        FTransform relative_transform = FTransform();
+        FQuat orientation = FQuat();
+        USkeletalMeshComponent* skeletal_mesh;
+
+        DetectionInfo_UU()
+        {
+        }
+
+        DetectionInfo_UU(const std::string& name_val, const Box2D_UU& box2D_val, const Box3D_UU& box3D_val, const FTransform& relative_transform_val)
+            : name(name_val), box2D(box2D_val), box3D(box3D_val), relative_transform(relative_transform_val)
+        {
+        }
+    };
+
     struct CollisionResponse
     {
         unsigned int collision_count_raw = 0;

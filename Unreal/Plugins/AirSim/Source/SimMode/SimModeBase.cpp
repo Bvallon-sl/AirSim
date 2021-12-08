@@ -283,6 +283,7 @@ void ASimModeBase::setTimeOfDay(bool is_enabled, const std::string& start_dateti
 
 bool ASimModeBase::isPaused() const
 {
+    //return UGameplayStatics::IsGamePaused(this->GetWorld());
     return false;
 }
 

@@ -114,19 +114,23 @@ void RecordingFile::appendRecord(const std::vector<msr::airlib::ImageCaptureBase
 
     FJsonFrameDetections frameDetections;
 
-    if (mask.empty()) UE_LOG(LogTemp, Warning, TEXT("mask empty"));
-    logDetections(pawn->getCamera("Left"), mask, detections, frameDetections); // Compute Detections and store them in the Struct
+    if (mask.empty()) {
+        UE_LOG(LogTemp, Warning, TEXT("mask empty"));
+    }
+    else {
+        logDetections(pawn->getCamera("Left"), responses[0].height, mask, detections, frameDetections); // Compute Detections and store them in the Struct. Assuming all cameras have the same res.
+    }
+
     fdata.Detections = frameDetections;
 
     data.Frames.Add(fdata);
-    //UAirBlueprintLib::LogMessage(TEXT("Screenshot saved to:"), filePath, LogDebugLevel::Success);
 
-    if (msr::airlib::AirSimSettings::singleton().simmode_name == "Multirotor") {
+    /*if (msr::airlib::AirSimSettings::singleton().simmode_name == "Multirotor") {
         auto vehicleAPI = static_cast<MultirotorPawnSimApi*>(pawn)->getVehicleApi();
         //msr::airlib::ImuBase::Output imuData = vehicleAPI->getImuData("Imu");
         // msr::airlib::BarometerBase::Output barometerData = vehicleAPI->getBarometerData("Barometer");
         //UE_LOG(LogTemp, Warning, TEXT("baro, %f"), barometerData.pressure);
-    }
+    }*/
     frameIndex++;
 }
 
@@ -173,7 +177,15 @@ FJsonSkeleton3DData RecordingFile::RetrieveSkeletonData(FTransform camPose, msr:
 
     for (int idx = 0; idx < (int)BODY_PARTS_POSE_34::LAST; idx++) {
 
-        if (targetBone[idx] == "not_found") continue;
+        if (targetBone[idx] == "not_found") {
+
+            skeleton_raw.local_position_per_joint.Add(FVector(INVALID_VALUE,INVALID_VALUE,INVALID_VALUE));
+            skeleton_raw.local_orientation_per_joint.Add(FQuat(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE, INVALID_VALUE)); /// ?????????
+
+            skeleton_raw.keypoints.Add(FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE));
+
+            continue;
+        }
 
         FTransform local_joint_transform = detection.skeletal_mesh->GetBoneTransform(idx);
 
@@ -183,8 +195,7 @@ FJsonSkeleton3DData RecordingFile::RetrieveSkeletonData(FTransform camPose, msr:
 
         skeleton_raw.local_position_per_joint.Add(convertFromUUToUnityCoordinateSystem(worldToCam(camPose, local_position)));
         skeleton_raw.local_orientation_per_joint.Add(convertFromUUToUnityCoordinateSystem(FTransform(worldToCam(camPose, local_orientation))).GetRotation()); /// ?????????
-        //skeleton_raw.local_position_per_joint.Add(local_position);
-        //skeleton_raw.local_orientation_per_joint.Add(local_orientation);
+
         skeleton_raw.keypoints.Add(convertFromUUToUnityCoordinateSystem(worldToCam(camPose, keypoint)));
     }
 
@@ -192,10 +203,10 @@ FJsonSkeleton3DData RecordingFile::RetrieveSkeletonData(FTransform camPose, msr:
     return skeleton_raw;
 }
 
-void RecordingFile::logDetections(APIPCamera* camera, cv::Mat& mask, std::vector<msr::airlib::DetectionInfo_UU>& detections, FJsonFrameDetections& frameDetections)
+void RecordingFile::logDetections(APIPCamera* camera, int image_height, cv::Mat& mask, std::vector<msr::airlib::DetectionInfo_UU>& detections, FJsonFrameDetections& frameDetections)
 {
     FTransform cam_pose = camera->GetActorTransform();
-    auto height = 1080; // TO DO : retrieve the camera size;
+    auto height = image_height;
     int offset = 100;
     for (int idx_detection = 0; idx_detection < detections.size(); idx_detection++) {
         auto detection = detections[idx_detection];
@@ -210,8 +221,8 @@ void RecordingFile::logDetections(APIPCamera* camera, cv::Mat& mask, std::vector
         position.Z = detection.box3D.min.Z;
         singleDetection.Position3D_World_Floor = convertFromUUToUnityCoordinateSystem(camToWorld(cam_pose, FVector(position)));
 
-        FVector velocity = detection.relative_transform.GetTranslation(); //TO DO
-        singleDetection.Velocity3D_MPS = convertFromUUToUnityCoordinateSystem(velocity);
+        //FVector velocity = //TO DO
+        //singleDetection.Velocity3D_MPS = convertFromUUToUnityCoordinateSystem(velocity);
 
         FJsonBoundingBox2DData bbox2D_raw;
         bbox2D_raw.A = FVector2D(detection.box2D.min.X, detection.box2D.min.Y);

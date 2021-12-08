@@ -57,8 +57,8 @@ namespace airlib
             vector<float> image_data_float;
 
             std::string camera_name;
-            Vector3r camera_position = Vector3r::Zero();
-            Quaternionr camera_orientation = Quaternionr::Identity();
+            FVector camera_position = FVector::ZeroVector;
+            FQuat camera_orientation = FQuat::Identity;
             TTimePoint time_stamp = 0;
             std::string message;
             bool pixels_as_float = false;

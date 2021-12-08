@@ -245,6 +245,12 @@ static FVector camToWorld(FTransform camPose, FVector in) {
     return in;
 }
 
+static FQuat camToWorld(FTransform camPose, FQuat in)
+{
+    in = camPose.TransformRotation(in);
+    return in;
+}
+
 static FVector worldToCam(FTransform camPose, FVector in)
 {
     camPose = camPose.Inverse();
@@ -389,6 +395,30 @@ public:
         e31 = 0;
         e32 = 0;
     }
+
+    FTransform toTransform() {
+        FTransform transform;
+
+        FMatrix mat = FMatrix();
+        mat.SetIdentity();
+
+        mat.M[0][0] = e00;
+        mat.M[0][1] = e01;
+        mat.M[0][2] = e02;
+        mat.M[0][3] = e03;
+        mat.M[1][0] = e10;
+        mat.M[1][1] = e11;
+        mat.M[1][2] = e12;
+        mat.M[1][3] = e13;
+        mat.M[2][0] = e20;
+        mat.M[2][1] = e21;
+        mat.M[2][2] = e22;
+        mat.M[2][3] = e23;
+
+        transform.SetFromMatrix(mat);
+
+        return transform;
+    }
 };
 
 
@@ -471,6 +501,17 @@ public:
 
     UPROPERTY()
     FVector H;
+
+    FJsonBoundingBox3DData() {
+        A = FVector::ZeroVector;
+        B = FVector::ZeroVector;
+        C = FVector::ZeroVector;
+        D = FVector::ZeroVector;
+        E = FVector::ZeroVector;
+        F = FVector::ZeroVector;
+        G = FVector::ZeroVector;
+        H = FVector::ZeroVector;
+    }
 };
 
 USTRUCT()
@@ -491,6 +532,14 @@ public:
 
     UPROPERTY()
     FVector2D D;
+
+    FJsonBoundingBox2DData()
+    {
+        A = FVector2D::ZeroVector;
+        B = FVector2D::ZeroVector;
+        C = FVector2D::ZeroVector;
+        D = FVector2D::ZeroVector;
+    }
 
 };
 

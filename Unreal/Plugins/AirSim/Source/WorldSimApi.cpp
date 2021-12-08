@@ -580,25 +580,6 @@ void WorldSimApi::simPlotLineStrip(const std::vector<Vector3r>& points, const st
                                              true);
 }
 
-void WorldSimApi::simPlotLineStrip(const std::vector<FVector>& points, const std::vector<float>& color_rgba, float thickness, float duration, bool is_persistent)
-{
-    FColor color = FLinearColor{ color_rgba[0], color_rgba[1], color_rgba[2], color_rgba[3] }.ToFColor(true);
-
-    UAirBlueprintLib::RunCommandOnGameThread([this, &points, &color, thickness, duration, is_persistent]() {
-        for (size_t idx = 0; idx != points.size() - 1; ++idx) {
-            DrawDebugLine(simmode_->GetWorld(),
-                points[idx],
-                points[idx + 1],
-                color,
-                is_persistent,
-                duration,
-                0,
-                thickness);
-        }
-        },
-        true);
-}
-
 // plot line for points 0-1, 2-3, 4-5... must be even number of points
 void WorldSimApi::simPlotLineList(const std::vector<Vector3r>& points, const std::vector<float>& color_rgba, float thickness, float duration, bool is_persistent)
 {

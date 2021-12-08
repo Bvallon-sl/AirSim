@@ -40,7 +40,7 @@ private:
     void writeString(const std::string& line) const;
     bool isFileOpen() const;
 
-    void logDetections(APIPCamera* camera, cv::Mat& mask, std::vector<msr::airlib::DetectionInfo_UU>& detections, FJsonFrameDetections& frameDetections);
+    void logDetections(APIPCamera* camera, int image_height, cv::Mat& mask, std::vector<msr::airlib::DetectionInfo_UU>& detections, FJsonFrameDetections& frameDetections);
     FJsonBoundingBox2DData ComputeBbox2D(FJsonBoundingBox2DData raw_detection, cv::Mat mask, int id);
     FJsonSkeleton3DData RetrieveSkeletonData(FTransform camPose, msr::airlib::DetectionInfo_UU& detection);
 
