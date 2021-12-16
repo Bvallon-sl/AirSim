@@ -98,7 +98,7 @@ void RecordingFile::appendRecord(const std::vector<msr::airlib::ImageCaptureBase
 
     PawnSimApi* pawn = static_cast<PawnSimApi*>(vehicle_sim_api);
     FJsonFramePoseData trackedPoseData;
-    trackedPoseData.WorldPose = FJsonMatrix4x4(convertFromUUToUnityCoordinateSystem(pawn->getCamera("Left")->GetActorTransform()));
+    trackedPoseData.WorldPose = FJsonMatrix4x4(pawn->getCamera("Left")->GetActorTransform());
     FJsonFrameData fdata;
     fdata.EpochTimeStamp = ts;
 
@@ -172,34 +172,75 @@ FJsonBoundingBox2DData RecordingFile::ComputeBbox2D(FJsonBoundingBox2DData raw_d
 
 FJsonSkeleton3DData RecordingFile::RetrieveSkeletonData(FTransform camPose, msr::airlib::DetectionInfo_UU& detection)
 {
-
     FJsonSkeleton3DData skeleton_raw;
+
+    TArray<FTransform> boneSpaceTransforms = detection.skeletal_mesh->GetBoneSpaceTransforms();
+    FVector start = camPose.GetLocation();
 
     for (int idx = 0; idx < (int)BODY_PARTS_POSE_34::LAST; idx++) {
 
         if (targetBone[idx] == "not_found") {
 
             skeleton_raw.local_position_per_joint.Add(FVector(INVALID_VALUE,INVALID_VALUE,INVALID_VALUE));
-            skeleton_raw.local_orientation_per_joint.Add(FQuat(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE, INVALID_VALUE)); /// ?????????
+            skeleton_raw.local_orientation_per_joint.Add(FQuat(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE, INVALID_VALUE));
 
             skeleton_raw.keypoints.Add(FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE));
 
             continue;
         }
 
-        FTransform local_joint_transform = detection.skeletal_mesh->GetBoneTransform(idx);
+        FVector keypoint;
+        if (idx == (int)BODY_PARTS_POSE_34::PELVIS) { // The PELIVS kp is not at the same position in the SDK and in UE. Create a Fake kp at the correct position.
+            keypoint = (detection.skeletal_mesh->GetBoneLocation(targetBone[(int)BODY_PARTS_POSE_34::LEFT_HIP], EBoneSpaces::WorldSpace) + detection.skeletal_mesh->GetBoneLocation(targetBone[(int)BODY_PARTS_POSE_34::RIGHT_HIP], EBoneSpaces::WorldSpace)) / 2;
+        }
+        else {
+            keypoint = detection.skeletal_mesh->GetBoneLocation(targetBone[idx], EBoneSpaces::WorldSpace);
+        }
 
-        FVector keypoint = detection.skeletal_mesh->GetBoneLocation(targetBone[idx], EBoneSpaces::WorldSpace);
-        FVector local_position = detection.skeletal_mesh->GetBoneLocation(targetBone[idx], EBoneSpaces::ComponentSpace);
-        FQuat local_orientation = detection.skeletal_mesh->GetBoneQuaternion(targetBone[idx], EBoneSpaces::ComponentSpace);
+        // RAY CAST FOR OCCLUSION
+        FHitResult Hit;
 
-        skeleton_raw.local_position_per_joint.Add(convertFromUUToUnityCoordinateSystem(worldToCam(camPose, local_position)));
-        skeleton_raw.local_orientation_per_joint.Add(convertFromUUToUnityCoordinateSystem(FTransform(worldToCam(camPose, local_orientation))).GetRotation()); /// ?????????
+        FVector end = keypoint;
+        FCollisionQueryParams TraceParams(FName(TEXT("")), true);
 
-        skeleton_raw.keypoints.Add(convertFromUUToUnityCoordinateSystem(worldToCam(camPose, keypoint)));
+        bool raycast = detection.actor->GetWorld()->LineTraceSingleByChannel(OUT Hit, start, end, ECollisionChannel::ECC_Visibility, TraceParams);
+
+        // See what if anything has been hit and return what
+        AActor* ActorHit = Hit.GetActor();
+
+        float dist = FVector::Distance(keypoint, Hit.ImpactPoint);
+        //UE_LOG(LogTemp, Warning, TEXT("target bone : %s  of index : %i || distance between impact and kp : %f || Threshold : %f"), *targetBone[idx].ToString(), idx, dist, occlusion_thresholds[idx]);
+
+        //if (targetBone[idx] == "LeftHand") {
+        //    UKismetSystemLibrary::DrawDebugSphere(detection.actor->GetWorld(), Hit.ImpactPoint, 15, 24, FColor::Red, 5, 2);
+        //    UE_LOG(LogTemp, Warning, TEXT("target bone : %s || impact : %s"), *keypoint.ToString(), *Hit.ImpactPoint.ToString());
+        //}
+
+        if (ActorHit && ActorHit->GetName() == detection.actor->GetName() && dist < occlusion_thresholds[idx]) { // if the ray cast hits the correct joint and the correct actor, then it's visible
+
+            //UE_LOG(LogTemp, Warning, TEXT("%s is  visible"), *targetBone[idx].ToString());
+            FVector local_position = boneSpaceTransforms[detection.skeletal_mesh->GetBoneIndex(targetBone[idx])].GetTranslation();
+            FQuat local_orientation = boneSpaceTransforms[detection.skeletal_mesh->GetBoneIndex(targetBone[idx])].GetRotation();
+
+            skeleton_raw.local_position_per_joint.Add(convertFromUUToUnityCoordinateSystem(worldToCam(camPose, local_position)));
+            skeleton_raw.local_orientation_per_joint.Add(convertFromUUToUnityCoordinateSystem(FTransform(worldToCam(camPose, local_orientation))).GetRotation()); /// ?????????
+
+            skeleton_raw.keypoints.Add(convertFromUUToUnityCoordinateSystem(worldToCam(camPose, keypoint)));
+        }
+        else { // it's occluded
+
+            //UE_LOG(LogTemp, Warning, TEXT("%s is not visible"), *targetBone[idx].ToString());
+            //UE_LOG(LogTemp, Warning, TEXT("target bone : %s  of index : %i || distance between impact and kp : %f || Threshold : %f"), *targetBone[idx].ToString(), idx, dist, occlusion_thresholds[idx]);
+
+            skeleton_raw.local_position_per_joint.Add(FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE));
+            skeleton_raw.local_orientation_per_joint.Add(FQuat(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE, INVALID_VALUE));
+
+            skeleton_raw.keypoints.Add(FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE));
+        }       
     }
 
-    skeleton_raw.global_root_orientation = convertFromUUToUnityCoordinateSystem(FTransform(detection.orientation)).GetRotation();
+    FQuat root_orientation = detection.skeletal_mesh->GetBoneQuaternion(targetBone[(int)BODY_PARTS_POSE_34::PELVIS], EBoneSpaces::WorldSpace);
+    skeleton_raw.global_root_orientation = convertFromUUToUnityCoordinateSystem(FTransform(worldToCam(camPose, root_orientation))).GetRotation();
     return skeleton_raw;
 }
 
@@ -221,8 +262,8 @@ void RecordingFile::logDetections(APIPCamera* camera, int image_height, cv::Mat&
         position.Z = detection.box3D.min.Z;
         singleDetection.Position3D_World_Floor = convertFromUUToUnityCoordinateSystem(camToWorld(cam_pose, FVector(position)));
 
-        //FVector velocity = //TO DO
-        //singleDetection.Velocity3D_MPS = convertFromUUToUnityCoordinateSystem(velocity);
+        FVector velocity = position; //TO DO
+        singleDetection.Velocity3D_MPS = convertFromUUToUnityCoordinateSystem(velocity);
 
         FJsonBoundingBox2DData bbox2D_raw;
         bbox2D_raw.A = FVector2D(detection.box2D.min.X, detection.box2D.min.Y);
@@ -262,7 +303,7 @@ void RecordingFile::logDetections(APIPCamera* camera, int image_height, cv::Mat&
 
         FJsonSkeleton3DData skeleton3D_raw = RetrieveSkeletonData(cam_pose, detection);
 
-        singleDetection.Skeleton3D_Camera_Raw = skeleton3D_raw;
+        singleDetection.Skeleton3D_Camera = skeleton3D_raw;
 
         frameDetections.ObjectDetections.Push(singleDetection);
     }

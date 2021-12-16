@@ -94,14 +94,11 @@ public:
         const std::string& vehicle_name, bool external) const override;
     virtual std::vector<uint8_t> getImage(ImageCaptureBase::ImageType image_type, const CameraDetails& camera_details) const override;
 
-    //virtual void getImages(const std::vector<ImageCaptureBase::ImageRequest>& request, std::vector<ImageCaptureBase::ImageResponse>& responses) const override;
-    //virtual void getImage(const ImageCaptureBase::ImageRequest& request, ImageCaptureBase::ImageResponse& response) const override;
-
     virtual void addDetectionFilterMeshName(ImageCaptureBase::ImageType image_type, const std::string& mesh_name, const CameraDetails& camera_details) override;
     virtual void setDetectionFilterRadius(ImageCaptureBase::ImageType image_type, float radius_cm, const CameraDetails& camera_details) override;
     virtual void clearDetectionMeshNames(ImageCaptureBase::ImageType image_type, const CameraDetails& camera_details) override;
     virtual std::vector<msr::airlib::DetectionInfo> getDetections(ImageCaptureBase::ImageType image_type, const CameraDetails& camera_details) override;
-    virtual std::vector<msr::airlib::DetectionInfo_UU> getDetections_UU(ImageCaptureBase::ImageType image_type, const CameraDetails& camera_details) override; // same function but result is in unreal units
+    virtual std::vector<msr::airlib::DetectionInfo_UU> getDetections_UU(ImageCaptureBase::ImageType image_type, const CameraDetails& camera_details) override; // same function but data is in unreal units
 
 private:
     AActor* createNewStaticMeshActor(const FActorSpawnParameters& spawn_params, const FTransform& actor_transform, const Vector3r& scale, UStaticMesh* static_mesh);

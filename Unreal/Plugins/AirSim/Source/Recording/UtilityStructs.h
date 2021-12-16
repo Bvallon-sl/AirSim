@@ -2,14 +2,16 @@
 
 #include <string>
 #include "CoreMinimal.h"
+#include "Engine/World.h"
 #include "common/Common.hpp"
 #include "opencv2/core.hpp"
 #include <opencv2/opencv.hpp>
 
 #include "UtilityStructs.generated.h"
 
+
 #define IS_MICROSECONDS true
-#define INVALID_VALUE -999.0
+#define INVALID_VALUE -999
 #define BBOX_MINIMUM_VOLUME 0.005
 #define MAX_DISTANCE_METER 40
 
@@ -134,6 +136,63 @@ const TArray<FName> targetBone = {
     "not_found" //right heel
 };
 
+const TArray<float> occlusion_thresholds = {
+    20, //Hips
+    30, //Spine 1
+    30, //Spine 2
+    15, //Neck
+    25, //LeftShoulder
+    20, //LeftArm
+    12, //LeftForeArm
+    8, //LeftHand
+    8, //LeftHandMiddle1
+    5, //LeftHandMiddle4
+    4, //LeftHandThumb4
+    25, //RightShoulder
+    20, //RightArm
+    12, //RightForeArm
+    8, //RightHand
+    8, //RightHandMiddle1
+    5, //RightHandMiddle4
+    4, //RightHandThumb4
+    25, //LeftUpLeg
+    18, //LeftLeg
+    12, //LeftFoot
+    7, // LeftToe_End
+    25, //RightUpLeg
+    18, //RightLeg
+    12, //RightFoot
+    7, // RightToe_End
+    15, //Head
+    999, //
+    7, //LeftEye
+    999,
+    7, //RightEye
+    999,
+    999,
+    999
+};
+
+static bool isInvalidValue(FVector in) {
+    bool isInvalid = false;
+
+    if (in.X == INVALID_VALUE /* && in.Y <= INVALID_VALUE && in.Z <= INVALID_VALUE*/) {
+        isInvalid = true;
+    }
+
+    return isInvalid;
+}
+
+static bool isInvalidValue(FQuat in)
+{
+    bool isInvalid = false;
+
+    if (in.X <= INVALID_VALUE && in.Y <= INVALID_VALUE && in.Z <= INVALID_VALUE && in.W <= INVALID_VALUE) {
+        isInvalid = true;
+    }
+
+    return isInvalid;
+}
 
 static FVector warpPoint_(FVector pt_curr, const FMatrix path, float scale = 1)
 {
@@ -188,8 +247,6 @@ static FTransform convertFromUUToUnityCoordinateSystem(FTransform in)
 {
     FTransform coordTransf = getCoordinateTransformConversion4f();
     FTransform out = (coordTransf * in * coordTransf.Inverse());
-    //FVector trans = out.GetLocation() / 100;
-    //out.SetLocation(trans);
 
     return out;
 }
@@ -254,7 +311,6 @@ static FQuat camToWorld(FTransform camPose, FQuat in)
 static FVector worldToCam(FTransform camPose, FVector in)
 {
     camPose = camPose.Inverse();
-    //in = camPose.TransformPosition(in);
     in = camPose.GetRotation().RotateVector(in);
     in += camPose.GetTranslation();
     return in;
@@ -266,6 +322,54 @@ static FQuat worldToCam(FTransform camPose, FQuat in)
     in = camPose.TransformRotation(in);
     return in;
 }
+
+// 3x3 matrix to 3x1 rodrigues vector
+static FVector convertMatrixToRot(FMatrix mat) {
+    FVector output;
+
+    cv::Mat Rot3x3 = cv::Mat(3, 3, CV_32FC1);
+    Rot3x3.at<float>(0, 0) = mat.M[0][0];
+    Rot3x3.at<float>(0, 1) = mat.M[0][1];
+    Rot3x3.at<float>(0, 2) = mat.M[0][2];
+
+    Rot3x3.at<float>(1, 0) = mat.M[1][0];
+    Rot3x3.at<float>(1, 1) = mat.M[1][1];
+    Rot3x3.at<float>(1, 2) = mat.M[1][2];
+
+    Rot3x3.at<float>(2, 0) = mat.M[2][0];
+    Rot3x3.at<float>(2, 1) = mat.M[2][1];
+    Rot3x3.at<float>(2, 2) = mat.M[2][2];
+
+    cv::Mat Rot3x1;
+    cv::Rodrigues(Rot3x3, Rot3x1);
+
+    output = FVector(Rot3x1.at<float>(0, 0), Rot3x1.at<float>(1, 0), Rot3x1.at<float>(2, 0));
+
+    return output;
+}
+
+
+static bool Raycast(AActor* actor, FVector start, FVector end) {
+    bool hit = false;
+
+    FHitResult Hit; 
+
+    actor->GetWorld()->LineTraceSingleByChannel(OUT Hit, start, end, ECollisionChannel::ECC_PhysicsBody);
+
+    // See what if anything has been hit and return what
+    AActor* ActorHit = Hit.GetActor();
+
+    UKismetSystemLibrary::DrawDebugLine(actor->GetWorld(), start, end, FColor(100, 0, 0), 1, 5);
+
+    if (ActorHit->GetName() == actor->GetName()) {
+        hit = true;
+        UE_LOG(LogTemp, Warning, TEXT("Line trace has hit: %s . Bone name : %s"), *(ActorHit->GetName()), *Hit.BoneName.ToString());
+    }
+
+
+    return hit;
+}
+
 
 struct ImageToSave
 {
@@ -342,7 +446,25 @@ public:
     float e33;
 
     FJsonMatrix4x4() {
+        e00 = INVALID_VALUE;
+        e01 = INVALID_VALUE;
+        e02 = INVALID_VALUE; 
+        e03 = INVALID_VALUE;
 
+        e10 = INVALID_VALUE;
+        e11 = INVALID_VALUE;
+        e12 = INVALID_VALUE;
+        e13 = INVALID_VALUE;
+
+        e20 = INVALID_VALUE;
+        e21 = INVALID_VALUE;
+        e22 = INVALID_VALUE;
+        e23 = INVALID_VALUE;
+
+        e30 = INVALID_VALUE;
+        e31 = INVALID_VALUE;
+        e32 = INVALID_VALUE;
+        e33 = INVALID_VALUE;
     }
 
     FJsonMatrix4x4(msr::airlib::Pose pose) {
@@ -373,7 +495,6 @@ public:
         //Convert to Unity Coordinate system (left handed Z up to left handed Y up)
         FTransform coordTransf = getCoordinateTransformConversion4f();
         FMatrix mat = (coordTransf * transform * coordTransf.Inverse()).ToMatrixWithScale();
-
         mat = mat.GetTransposed();
 
         e03 = mat.M[0][3] / 100.0;
@@ -414,9 +535,15 @@ public:
         mat.M[2][1] = e21;
         mat.M[2][2] = e22;
         mat.M[2][3] = e23;
+        mat.M[3][0] = e20;
+        mat.M[3][1] = e31;
+        mat.M[3][2] = e32;
+        mat.M[3][3] = e33;
 
-        transform.SetFromMatrix(mat);
 
+        transform.SetRotation(FQuat(mat));
+        transform.SetTranslation(FVector(e03, e13, e23));
+        //transform.SetFromMatrix(mat.GetTransposed());
         return transform;
     }
 };
@@ -503,14 +630,14 @@ public:
     FVector H;
 
     FJsonBoundingBox3DData() {
-        A = FVector::ZeroVector;
-        B = FVector::ZeroVector;
-        C = FVector::ZeroVector;
-        D = FVector::ZeroVector;
-        E = FVector::ZeroVector;
-        F = FVector::ZeroVector;
-        G = FVector::ZeroVector;
-        H = FVector::ZeroVector;
+        A = FVector(INVALID_VALUE,INVALID_VALUE,INVALID_VALUE);
+        B = FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE);
+        C = FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE);
+        D = FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE);
+        E = FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE);
+        F = FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE);
+        G = FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE);
+        H = FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE);
     }
 };
 
@@ -535,10 +662,10 @@ public:
 
     FJsonBoundingBox2DData()
     {
-        A = FVector2D::ZeroVector;
-        B = FVector2D::ZeroVector;
-        C = FVector2D::ZeroVector;
-        D = FVector2D::ZeroVector;
+        A = FVector2D(INVALID_VALUE,INVALID_VALUE);
+        B = FVector2D(INVALID_VALUE, INVALID_VALUE);
+        C = FVector2D(INVALID_VALUE, INVALID_VALUE);
+        D = FVector2D(INVALID_VALUE, INVALID_VALUE);
     }
 
 };
@@ -597,7 +724,7 @@ public:
     FJsonBoundingBox2DData BoundingBox2D_Raw;
 
     UPROPERTY()
-    FJsonSkeleton3DData Skeleton3D_Camera_Raw;
+    FJsonSkeleton3DData Skeleton3D_Camera;
 };
 
 USTRUCT()
@@ -648,6 +775,90 @@ public:
     UPROPERTY()
     TArray<FJsonFrameData> Frames;
 };
+
+USTRUCT()
+struct FJsonSingleCalib
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    int inputType;
+
+    UPROPERTY()
+    FString inputPath;
+
+    UPROPERTY()
+    float rx;
+
+    UPROPERTY()
+    float ry;
+
+    UPROPERTY()
+    float rz;
+
+    UPROPERTY()
+    int64 serial;
+
+    UPROPERTY()
+    float tx;
+
+    UPROPERTY()
+    float ty;
+
+    UPROPERTY()
+    float tz;
+
+};
+
+USTRUCT()
+struct FJsonMulticamCalib
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    TArray<FJsonSingleCalib> singleCalibs;
+};
+
+static FString SerializeJson(FJsonMulticamCalib calibs) {
+
+    FString OutputString;
+    TSharedPtr<FJsonObject> JsonObject = MakeShareable(new FJsonObject);
+
+    TArray<TSharedPtr<FJsonValue>> objArray;
+
+	for (int32 i = 0; i < calibs.singleCalibs.Num(); i++)
+    {
+        FJsonSingleCalib calib = calibs.singleCalibs[i];
+
+        TSharedPtr<FJsonObject> json = MakeShareable(new FJsonObject);
+
+        json->SetNumberField("input", calib.inputType);
+        json->SetStringField("input_path", calib.inputPath);
+
+        json->SetNumberField("rx", calib.rx);
+        json->SetNumberField("ry", calib.ry);
+        json->SetNumberField("rz", calib.rz);
+
+        json->SetNumberField("tx", calib.tx);
+        json->SetNumberField("ty", calib.ty);
+        json->SetNumberField("tz", calib.tz);
+
+        json->SetNumberField("serial", calib.serial);
+
+        TSharedPtr<FJsonValue> value = MakeShareable(new FJsonValueObject(json));
+
+        objArray.Add(value);
+    }
+        
+    JsonObject->SetArrayField("ZED", objArray);
+
+    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutputString);
+    FJsonSerializer::Serialize(JsonObject.ToSharedRef(), Writer);
+
+    return OutputString;
+}
 
 
 static FString SerializeJson(FJsonDataSet data)
@@ -925,36 +1136,36 @@ static FString SerializeJson(FJsonDataSet data)
             TSharedPtr<FJsonObject> Skeleton_Raw_3D = MakeShareable(new FJsonObject);
 
             TArray<TSharedPtr<FJsonValue>> globalOrientationPerJoint;
-            globalOrientationPerJoint.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.global_root_orientation.X)));
-            globalOrientationPerJoint.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.global_root_orientation.Y)));
-            globalOrientationPerJoint.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.global_root_orientation.Z)));
-            globalOrientationPerJoint.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.global_root_orientation.W)));
+            globalOrientationPerJoint.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.global_root_orientation.X)));
+            globalOrientationPerJoint.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.global_root_orientation.Y)));
+            globalOrientationPerJoint.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.global_root_orientation.Z)));
+            globalOrientationPerJoint.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.global_root_orientation.W)));
             Skeleton_Raw_3D->SetArrayField("Global_Root_Orientation", globalOrientationPerJoint);
 
             TArray<TSharedPtr<FJsonValue>> LocalPositionPerJoint;
             TArray<TSharedPtr<FJsonValue>> LocalOrientationPerJoint;
             TArray<TSharedPtr<FJsonValue>> Keypoints;
-            for (int i = 0; i < detection.Skeleton3D_Camera_Raw.local_position_per_joint.Num(); i++) {
+            for (int i = 0; i < detection.Skeleton3D_Camera.local_position_per_joint.Num(); i++) {
             
                 TArray<TSharedPtr<FJsonValue>> joint_position;
-                joint_position.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.local_position_per_joint[i].X)));
-                joint_position.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.local_position_per_joint[i].Y)));
-                joint_position.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.local_position_per_joint[i].Z)));
+                joint_position.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_position_per_joint[i].X)));
+                joint_position.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_position_per_joint[i].Y)));
+                joint_position.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_position_per_joint[i].Z)));
 
                 LocalPositionPerJoint.Add(MakeShareable(new FJsonValueArray(joint_position)));
 
                 TArray<TSharedPtr<FJsonValue>> keypoints;
-                keypoints.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.keypoints[i].X)));
-                keypoints.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.keypoints[i].Y)));
-                keypoints.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.keypoints[i].Z)));
+                keypoints.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.keypoints[i].X)));
+                keypoints.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.keypoints[i].Y)));
+                keypoints.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.keypoints[i].Z)));
 
                 Keypoints.Add(MakeShareable(new FJsonValueArray(keypoints)));
 
                 TArray<TSharedPtr<FJsonValue>> joint_orientation;
-                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.local_orientation_per_joint[i].X)));
-                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.local_orientation_per_joint[i].Y)));
-                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.local_orientation_per_joint[i].Z)));
-                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera_Raw.local_orientation_per_joint[i].W)));
+                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_orientation_per_joint[i].X)));
+                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_orientation_per_joint[i].Y)));
+                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_orientation_per_joint[i].Z)));
+                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_orientation_per_joint[i].W)));
 
                 LocalOrientationPerJoint.Add(MakeShareable(new FJsonValueArray(joint_orientation)));
             }
@@ -963,7 +1174,7 @@ static FString SerializeJson(FJsonDataSet data)
             Skeleton_Raw_3D->SetArrayField("Keypoints", Keypoints);
             Skeleton_Raw_3D->SetArrayField("Local_Orientation_Per_Joint", LocalOrientationPerJoint);
 
-            singleDetectionObj->SetObjectField("Skeleton3D_Camera_Raw", Skeleton_Raw_3D);
+            singleDetectionObj->SetObjectField("Skeleton3D_Camera", Skeleton_Raw_3D);
 
             TSharedRef<FJsonValueObject> singleDetectionValue = MakeShareable(new FJsonValueObject(singleDetectionObj));
             ObjectDetections.Add(singleDetectionValue);

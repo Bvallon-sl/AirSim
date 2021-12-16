@@ -107,22 +107,64 @@ void FRecordingThread::killRecording()
     }
 }
 
+void FRecordingThread::createMulticamCalibFile(std::vector<FJsonDataSet> data, std::string folder_path)
+{
+    IPlatformFile& platform_file = FPlatformFileManager::Get().GetPlatformFile();
+
+    // Calib file
+    std::string calib_filepath = common_utils::FileSystem::getLogFileNamePath(folder_path, "../multicam_calib", "", ".json", false);
+    FJsonMulticamCalib multicam_calib_file;
+
+    if (data.size() > 0) {
+    
+        for (FJsonDataSet dataset : data) {
+
+            FJsonSingleCalib calib;
+
+            calib.inputPath = "";
+            calib.inputType = 2;
+            calib.serial = dataset.Metadata.ZEDSerialNumber;
+            
+            FTransform camera_transform = convertFromUnityToImageCoordinateSystem(dataset.InitialWorldPosition.toTransform());
+            calib.tx = camera_transform.GetLocation().X * 1000;
+            calib.ty = camera_transform.GetLocation().Y * 1000;
+            calib.tz = camera_transform.GetLocation().Z * 1000;
+
+            FVector rot = convertMatrixToRot(camera_transform.ToMatrixWithScale());
+
+            calib.rx = rot.X;
+            calib.ry = rot.Y;
+            calib.rz = rot.Z;
+
+            multicam_calib_file.singleCalibs.Add(calib);
+        }
+
+        IFileHandle* calib_file_handle_ = platform_file.OpenWrite(*FString(calib_filepath.c_str()));
+        FString line_f(std::string(TCHAR_TO_UTF8(*SerializeJson(multicam_calib_file))).c_str());
+        calib_file_handle_->Write((const uint8*)TCHAR_TO_ANSI(*line_f), line_f.Len());
+
+        delete calib_file_handle_;
+        calib_file_handle_ = nullptr;
+    
+    }
+}
+
 //create multicamera json  based on each single cam data
 void FRecordingThread::createMulticamJsonFile(std::vector<FJsonDataSet> data, std::string folder_path)
 {
+    IPlatformFile& platform_file = FPlatformFileManager::Get().GetPlatformFile();
 
+    // Fused GT json
     std::string log_filepath = common_utils::FileSystem::getLogFileNamePath(folder_path, "../multicam_data", "", ".json", false);
-
     FJsonDataSet multicam_file;
 
     if (data.size() > 0) {
 
         multicam_file.Metadata = data[0].Metadata;
 
-        TArray<int> detected_ids;
+        TMap<int, FJsonSingleDetection> detected_ids;
         for (int i = 0; i < data[0].Frames.Num(); i++) { //assuming all gt have the same number of frame
             detected_ids.Reset();
-
 
             FJsonFrameData fusedFrame;
             fusedFrame.EpochTimeStamp = data[0].Frames[i].EpochTimeStamp;
@@ -130,38 +172,52 @@ void FRecordingThread::createMulticamJsonFile(std::vector<FJsonDataSet> data, st
             fusedFrame.ImageFileName = data[0].Frames[i].ImageFileName;
 
             FJsonFrameDetections fusedFrameDetection;
-            for (FJsonDataSet dataset : data) {
-                UE_LOG(LogTemp, Warning, TEXT("toto"));
-                for (FJsonSingleDetection singleDetection : dataset.Frames[i].Detections.ObjectDetections) {
+            for (FJsonDataSet dataset : data) { //foreach json
+                for (int j = 0; j < dataset.Frames[i].Detections.ObjectDetections.Num(); j++){
+                //for (FJsonSingleDetection singleDetection : dataset.Frames[i].Detections.ObjectDetections) { //foreach detection
+
+                    FJsonSingleDetection singleDetection = dataset.Frames[i].Detections.ObjectDetections[j];
+                    FTransform worlPose = dataset.Frames[i].TrackedPose.WorldPose.toTransform();
+
                     if (!detected_ids.Contains(singleDetection.ObjectID)) {
                         FJsonSingleDetection fusedFrameSingleDetection;
                         fusedFrameSingleDetection.ObjectID = singleDetection.ObjectID;
                         fusedFrameSingleDetection.ObjectType = singleDetection.ObjectType;
                         
-                        fusedFrameSingleDetection.Skeleton3D_Camera_Raw.global_root_orientation = camToWorld(dataset.Frames[i].TrackedPose.WorldPose.toTransform(), singleDetection.Skeleton3D_Camera_Raw.global_root_orientation);
-                                                
+                        fusedFrameSingleDetection.BoundingBox3D_World = singleDetection.BoundingBox3D_World;
+                        fusedFrameSingleDetection.BoundingBox3D_World_Raw = singleDetection.BoundingBox3D_World_Raw;
+                        fusedFrameSingleDetection.Position3D_World_Floor = singleDetection.Position3D_World_Floor;
+                        fusedFrameSingleDetection.Velocity3D_MPS = singleDetection.Velocity3D_MPS;
+
+                        fusedFrameSingleDetection.Skeleton3D_Camera.global_root_orientation = camToWorld(worlPose, singleDetection.Skeleton3D_Camera.global_root_orientation);                            
+
                         for (int idx = 0; idx < (int)BODY_PARTS_POSE_34::LAST; idx++) {
-                            
-                            fusedFrameSingleDetection.Skeleton3D_Camera_Raw.keypoints.Add(camToWorld(dataset.Frames[i].TrackedPose.WorldPose.toTransform(), singleDetection.Skeleton3D_Camera_Raw.keypoints[idx]));
-                            fusedFrameSingleDetection.Skeleton3D_Camera_Raw.local_position_per_joint.Add(camToWorld(dataset.Frames[i].TrackedPose.WorldPose.toTransform(), singleDetection.Skeleton3D_Camera_Raw.local_position_per_joint[idx]));
-                            fusedFrameSingleDetection.Skeleton3D_Camera_Raw.local_orientation_per_joint.Add(camToWorld(dataset.Frames[i].TrackedPose.WorldPose.toTransform(), singleDetection.Skeleton3D_Camera_Raw.local_orientation_per_joint[idx]));   
+                      
+                            fusedFrameSingleDetection.Skeleton3D_Camera.keypoints.Add(camToWorld(worlPose, singleDetection.Skeleton3D_Camera.keypoints[idx]));
+                            fusedFrameSingleDetection.Skeleton3D_Camera.local_position_per_joint.Add(camToWorld(worlPose, singleDetection.Skeleton3D_Camera.local_position_per_joint[idx]));
+                            fusedFrameSingleDetection.Skeleton3D_Camera.local_orientation_per_joint.Add(camToWorld(worlPose, singleDetection.Skeleton3D_Camera.local_orientation_per_joint[idx])); 
                         }
 
+                        detected_ids.Add(singleDetection.ObjectID, fusedFrameSingleDetection);
                         fusedFrameDetection.ObjectDetections.Add(fusedFrameSingleDetection);
-
-                        detected_ids.Add(singleDetection.ObjectID);
+                    }
+                    else {
+                        for (int idx = 0; idx < (int)BODY_PARTS_POSE_34::LAST; idx++) {
+                            if (isInvalidValue(fusedFrameDetection.ObjectDetections[j].Skeleton3D_Camera.keypoints[idx])) {
+                                fusedFrameDetection.ObjectDetections[j].Skeleton3D_Camera.keypoints[idx] = (camToWorld(worlPose, singleDetection.Skeleton3D_Camera.keypoints[idx]));
+                                fusedFrameDetection.ObjectDetections[j].Skeleton3D_Camera.local_position_per_joint[idx] = (camToWorld(worlPose, singleDetection.Skeleton3D_Camera.local_position_per_joint[idx]));
+                                fusedFrameDetection.ObjectDetections[j].Skeleton3D_Camera.local_orientation_per_joint[idx] = (camToWorld(worlPose, singleDetection.Skeleton3D_Camera.local_orientation_per_joint[idx]));                         
+                            }
+                        }
+                        fusedFrameDetection.ObjectDetections[j] = detected_ids[singleDetection.ObjectID];
                     }
                 }
             }
 
             fusedFrame.Detections = fusedFrameDetection;
-
             multicam_file.Frames.Add(fusedFrame);
         }
 
-
-
-        IPlatformFile& platform_file = FPlatformFileManager::Get().GetPlatformFile();
         IFileHandle* log_file_handle_ = platform_file.OpenWrite(*FString(log_filepath.c_str()));
         FString line_f(std::string(TCHAR_TO_UTF8(*SerializeJson(multicam_file))).c_str());
         log_file_handle_->Write((const uint8*)TCHAR_TO_ANSI(*line_f), line_f.Len());
@@ -237,6 +293,7 @@ uint32 FRecordingThread::Run()
 	}
     
     createMulticamJsonFile(datasets, folder_path);
+    createMulticamCalibFile(datasets, folder_path);
 
     //recording_file_.reset();
     for (const auto& vehicle_sim_api : vehicle_sim_apis_)

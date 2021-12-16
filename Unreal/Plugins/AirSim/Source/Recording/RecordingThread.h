@@ -43,6 +43,7 @@ protected:
 private:
 
     static void createMulticamJsonFile(std::vector<FJsonDataSet> data, std::string folder_path);
+    static void createMulticamCalibFile(std::vector<FJsonDataSet> data, std::string folder_path);
 
     FThreadSafeCounter stop_task_counter_;
 
