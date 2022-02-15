@@ -15,6 +15,8 @@
 #include "WorldSimApi.h"
 
 #include <string>
+#include <fstream>
+
 
 class FRecordingThread : public FRunnable
 {
@@ -33,6 +35,8 @@ public:
     static void stopRecording();
     static void killRecording();
     static bool isRecording();
+
+    static void toggleImagesSaving();
 
 protected:
     virtual bool Init() override;
@@ -66,8 +70,11 @@ private:
     std::unordered_map<std::string, msr::airlib::Pose> last_poses_;
 
     msr::airlib::TTimePoint last_screenshot_on_;
+    msr::airlib::TTimePoint last_screenshot_on_imu_;
     bool is_ready_;
     static WorldSimApi* world_sim_api_;
+
+    static bool saving_;
 
     int counter = 0;
     int nb_frames_before_log = 2;

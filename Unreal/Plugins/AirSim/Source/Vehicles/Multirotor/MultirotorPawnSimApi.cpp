@@ -45,6 +45,7 @@ void MultirotorPawnSimApi::pawnTick(float dt)
 {
     unused(dt);
     //calls to update* are handled by physics engine and in SimModeWorldBase
+
 }
 
 void MultirotorPawnSimApi::updateRenderedState(float dt)
@@ -82,6 +83,7 @@ void MultirotorPawnSimApi::updateRenderedState(float dt)
 
     if (getRemoteControlID() >= 0)
         vehicle_api_->setRCData(getRCData());
+
     rotor_states_.timestamp = clock()->nowNanos();
     vehicle_api_->setRotorStates(rotor_states_);
 }

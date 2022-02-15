@@ -26,6 +26,7 @@ public:
 
 public:
     void inputEventToggleRecording();
+    void inputEventToggleImagesSave();
     void inputEventToggleReport();
     void inputEventToggleHelp();
     void inputEventToggleTrace();

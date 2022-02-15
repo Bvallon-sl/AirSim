@@ -51,12 +51,17 @@ private:
     FInputAxisKeyMapping up_pitch_mapping_, down_pitch_mapping_, left_roll_mapping_, right_roll_mapping_;
     FInputAxisKeyMapping inc_speed_mapping_, dec_speed_mapping_;
 
+    FInputAxisKeyMapping gamepad_left_mapping_, gamepad_right_mapping_, gamepad_up_mapping_, gamepad_down_mapping_;
+    FInputAxisKeyMapping gamepad_forward_mapping_, gamepad_backward_mapping_, gamepad_left_yaw_mapping_, gamepad_right_yaw_mapping_;
+    FInputAxisKeyMapping gamepad_up_pitch_mapping_, gamepad_down_pitch_mapping_ ;
+    FInputAxisKeyMapping gamepad_inc_speed_mapping_, gamepad_dec_speed_mapping_;
+    
     FVector delta_position_;
     FRotator delta_rotation_;
 
     AActor* actor_;
 
-    float acceleration_ = 0, speed_scaler_ = 100, rotation_scaler = 3;
-    FVector input_positive_, inpute_negative_;
+    float acceleration_ = 0, speed_scaler_ = 100, rotation_speed_scaler = 0.2;
+    FVector input_positive_, input_negative_;
     FVector last_velocity_;
 };

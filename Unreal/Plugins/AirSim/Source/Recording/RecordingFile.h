@@ -24,6 +24,7 @@ public:
     ~RecordingFile();
 
     void appendRecord(const std::vector<msr::airlib::ImageCaptureBase::ImageResponse>& responses, std::vector<msr::airlib::DetectionInfo_UU>& detections, msr::airlib::VehicleSimApiBase* vehicle_sim_api, int64 timestamp);
+    void appendSensorsData(msr::airlib::VehicleSimApiBase* vehicle_sim_api, int64 timestamp);
     void appendColumnHeader(const std::string& header_columns);
     void startRecording(msr::airlib::VehicleSimApiBase* vehicle_sim_api, int64 sequence_id, const std::string& folder = "");
     void stopRecording(bool ignore_if_stopped);
@@ -33,12 +34,16 @@ public:
     std::vector<ImageToSave> getImageToSave();
     std::string getImagePath();
 
+    void saveImages();
+
 private:
     void createFile(const std::string& file_path, const std::string& header_columns);
     void createJsonFile(const std::string& file_path);
     void closeFile();
     void writeString(const std::string& line) const;
     bool isFileOpen() const;
+
+    void clearImageToSave();
 
     void logDetections(APIPCamera* camera, int image_height, cv::Mat& mask, std::vector<msr::airlib::DetectionInfo_UU>& detections, FJsonFrameDetections& frameDetections);
     FJsonBoundingBox2DData ComputeBbox2D(FJsonBoundingBox2DData raw_detection, cv::Mat mask, int id);

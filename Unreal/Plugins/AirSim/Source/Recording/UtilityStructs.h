@@ -15,10 +15,15 @@
 #define BBOX_MINIMUM_VOLUME 0.005
 #define MAX_DISTANCE_METER 40
 
+#define FRAMERATE 15
+
 #define __cx 960
 #define __cy 540
 #define __fx 1400
 #define __fy 1400
+
+#define SAVE_SENSOR_DATA 1
+#define SAVE_DETECTION 0
 
 
 enum class BODY_PARTS_POSE_34
@@ -213,10 +218,11 @@ static FVector convertFromImageToUnityCoordinateSystem(FVector in)
     return out;
 }
 
-static FVector convertFromUUToUnityCoordinateSystem(FVector in)
+static FVector convertFromUUToUnityCoordinateSystem(FVector in, bool convertUnity = true)
 {
+    int factor = convertUnity ? 100 : 1;
     FVector out(in.Y, in.Z, in.X);
-    out /= 100;
+    out /= factor;
 
     return out;
 }
@@ -388,6 +394,104 @@ public:
     cv::Mat mask;
 
     std::string image_full_file_path;
+};
+
+USTRUCT()
+struct FJsonGeoPoint
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    double latitude;
+    UPROPERTY()
+    double longitude;
+    UPROPERTY()
+    float altitude;
+};
+
+USTRUCT()
+struct FJsonGPSData
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    int64 EpochTimeStamp;
+    UPROPERTY()
+    FJsonGeoPoint geoPoint;
+    UPROPERTY()
+    float eph; //GPS HDOP/VDOP horizontal/vertical dilution of position (unitless), 0-100%
+    UPROPERTY()
+    float epv;
+    UPROPERTY()
+    FVector velocity;
+};
+
+USTRUCT()
+struct FJsonMagnometerData
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    int64 EpochTimeStamp;
+    UPROPERTY()
+    FVector magneticFieldBody; //in Gauss
+    UPROPERTY()
+    TArray<float> magneticFieldCovariance; //9 elements 3x3 matrix
+};
+
+USTRUCT()
+struct FJsonBarometerData
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    int64 EpochTimeStamp;
+    UPROPERTY()
+    float altitude; //meters
+    UPROPERTY()
+    float pressure; //Pascal
+    UPROPERTY()
+    float qnh;
+};
+
+USTRUCT()
+struct FJsonIMUData
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    int64 EpochTimeStamp;
+    UPROPERTY()
+    FQuat orientation;
+    UPROPERTY()
+    FVector angularVelocity;
+    UPROPERTY()
+    FVector linearAcceleration;
+};
+
+
+USTRUCT()
+struct FJsonSensorsData
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    TArray<FJsonGPSData> GPSData;
+
+    UPROPERTY()
+    TArray<FJsonMagnometerData> magnetometerData;
+
+    UPROPERTY()
+    TArray<FJsonBarometerData> barometerData;
+
+    UPROPERTY()
+    TArray<FJsonIMUData> IMUData;
 };
 
 
@@ -774,6 +878,9 @@ public:
 
     UPROPERTY()
     TArray<FJsonFrameData> Frames;
+
+    UPROPERTY()
+    FJsonSensorsData Sensors;
 };
 
 USTRUCT()
@@ -868,7 +975,10 @@ static FString SerializeJson(FJsonDataSet data)
     // create a Json object and add a string field
     TSharedPtr<FJsonObject> JsonObject = MakeShareable(new FJsonObject);
 
-    // METADATA
+    ////////////////////////////////////
+    /// METADATA ///////////////////////
+    ////////////////////////////////////    
+    
     TSharedPtr<FJsonObject> metadata = MakeShareable(new FJsonObject);
     metadata->SetNumberField("SequenceID", data.Metadata.SequenceID);
     metadata->SetNumberField("ZEDSerialNumber", data.Metadata.ZEDSerialNumber);
@@ -913,8 +1023,9 @@ static FString SerializeJson(FJsonDataSet data)
         frameObj->SetNumberField("EpochTimeStamp", frame.EpochTimeStamp);
 
         ////////////////////////////////////
-        // ODOMETRY DATA ///////////////////
+        /// ODOMETRY DATA //////////////////
         ////////////////////////////////////
+
         TSharedPtr<FJsonObject> TrackedPose = MakeShareable(new FJsonObject);
         TSharedPtr<FJsonObject> WorldPose = MakeShareable(new FJsonObject);
 
@@ -939,8 +1050,9 @@ static FString SerializeJson(FJsonDataSet data)
         frameObj->SetObjectField("TrackedPose", TrackedPose);
 
         ////////////////////////////////////
-        // DETECTION DATA //////////////////
+        /// DETECTION DATA /////////////////
         ////////////////////////////////////
+
         TSharedPtr<FJsonObject> Detections = MakeShareable(new FJsonObject);
 
         TArray<TSharedPtr<FJsonValue>> ObjectDetections;
@@ -970,7 +1082,7 @@ static FString SerializeJson(FJsonDataSet data)
             singleDetectionObj->SetArrayField("Dimensions3D", dimensions3D);
 
             ////////////////////////////////////
-            // 2D DATA ////// //////////////////
+            /// 2D DATA ////// /////////////////
             ////////////////////////////////////
 
             TSharedPtr<FJsonObject> Bbox_2D = MakeShareable(new FJsonObject);
@@ -1020,11 +1132,11 @@ static FString SerializeJson(FJsonDataSet data)
             singleDetectionObj->SetObjectField("BoundingBox2D_Raw", Bbox_2D_Raw);
 
             ////////////////////////////////////
-            // 3D DATA /////////////////////////
+            /// 3D DATA ////////////////////////
             ////////////////////////////////////
 
             ////////////////////////////////////
-            // BOUNDING BOX  ///////////////////
+            /// BOUNDING BOX  //////////////////
             ////////////////////////////////////
 
             TSharedPtr<FJsonObject> Bbox_3D = MakeShareable(new FJsonObject);
@@ -1187,6 +1299,139 @@ static FString SerializeJson(FJsonDataSet data)
     }
 
     JsonObject->SetArrayField("Frames", Frames);
+    
+    ////////////////////////////////////
+    /// SENSORS DATA ///////////////////
+    ////////////////////////////////////
+
+#if SAVE_SENSOR_DATA
+
+    TSharedPtr<FJsonObject> SensorsDataObj = MakeShareable(new FJsonObject);
+
+    TArray<TSharedPtr<FJsonValue>> IMUData;
+    TArray<TSharedPtr<FJsonValue>> MagnetometerData;
+    TArray<TSharedPtr<FJsonValue>> BarometerData;
+    TArray<TSharedPtr<FJsonValue>> GPSData;
+
+    /////////////////// IMU DATA ///////////////////
+
+    for (auto imusensor : data.Sensors.IMUData) {
+
+        TSharedPtr<FJsonObject> imuObj = MakeShareable(new FJsonObject);
+        imuObj->SetNumberField("EpochTimeStamp", imusensor.EpochTimeStamp);
+        FVector angVel = imusensor.angularVelocity;
+        TArray<TSharedPtr<FJsonValue>> angularVelocityValue;
+        angularVelocityValue.Add(MakeShareable(new FJsonValueNumber(angVel.X)));
+        angularVelocityValue.Add(MakeShareable(new FJsonValueNumber(angVel.Y)));
+        angularVelocityValue.Add(MakeShareable(new FJsonValueNumber(angVel.Z)));
+        imuObj->SetArrayField("AngularVelocity", angularVelocityValue);
+
+        FVector linearAccel = imusensor.linearAcceleration;
+        TArray<TSharedPtr<FJsonValue>> linearAccelerationValue;
+        linearAccelerationValue.Add(MakeShareable(new FJsonValueNumber(linearAccel.X)));
+        linearAccelerationValue.Add(MakeShareable(new FJsonValueNumber(linearAccel.Y)));
+        linearAccelerationValue.Add(MakeShareable(new FJsonValueNumber(linearAccel.Z)));
+        imuObj->SetArrayField("LinarAcceleration", linearAccelerationValue);
+
+        FQuat orientation = imusensor.orientation;
+        TArray<TSharedPtr<FJsonValue>> orientationValue;
+        orientationValue.Add(MakeShareable(new FJsonValueNumber(orientation.X)));
+        orientationValue.Add(MakeShareable(new FJsonValueNumber(orientation.Y)));
+        orientationValue.Add(MakeShareable(new FJsonValueNumber(orientation.Z)));
+        orientationValue.Add(MakeShareable(new FJsonValueNumber(orientation.W)));
+        imuObj->SetArrayField("Orientation", orientationValue);
+
+        TSharedRef<FJsonValueObject> imuValue = MakeShareable(new FJsonValueObject(imuObj));
+        IMUData.Add(imuValue);
+    }
+
+    /////////////////// MAGNETOMETER DATA ///////////////////
+
+    for (auto magnetosensor : data.Sensors.magnetometerData) {
+
+        TSharedPtr<FJsonObject> magnetoObj = MakeShareable(new FJsonObject);
+
+        magnetoObj->SetNumberField("EpochTimeStamp", magnetosensor.EpochTimeStamp);
+        FVector magFieldBody = magnetosensor.magneticFieldBody;
+        TArray<TSharedPtr<FJsonValue>> magneticFieldBodyValue;
+        magneticFieldBodyValue.Add(MakeShareable(new FJsonValueNumber(magFieldBody.X)));
+        magneticFieldBodyValue.Add(MakeShareable(new FJsonValueNumber(magFieldBody.Y)));
+        magneticFieldBodyValue.Add(MakeShareable(new FJsonValueNumber(magFieldBody.Z)));
+        magnetoObj->SetArrayField("MagneticFieldBody", magneticFieldBodyValue);
+
+        TArray<float> magFieldCovariance = magnetosensor.magneticFieldCovariance;
+        TArray<TSharedPtr<FJsonValue>> magneticFieldCovarianceValue;
+
+        for (int i = 0; i < magnetosensor.magneticFieldCovariance.Num(); i++) {
+            magneticFieldCovarianceValue.Add(MakeShareable(new FJsonValueNumber(magFieldCovariance[i])));
+        }
+
+        magnetoObj->SetArrayField("MagneticFieldCovariance", magneticFieldCovarianceValue);
+
+        TSharedRef<FJsonValueObject> magnetoValue = MakeShareable(new FJsonValueObject(magnetoObj));
+        MagnetometerData.Add(magnetoValue);
+    }
+
+    /////////////////// BAROMETER DATA ///////////////////
+
+    for (auto barosensor : data.Sensors.barometerData) {
+
+        TSharedPtr<FJsonObject> baroObj = MakeShareable(new FJsonObject);
+
+        float altitude = barosensor.altitude;
+        float pressure = barosensor.pressure;
+        float qnh = barosensor.qnh;
+
+        baroObj->SetNumberField("EpochTimeStamp", barosensor.EpochTimeStamp);
+        baroObj->SetNumberField("Altitude", altitude);
+        baroObj->SetNumberField("Pressure", pressure);
+        baroObj->SetNumberField("Qnh", qnh);
+
+        TSharedRef<FJsonValueObject> baroValue = MakeShareable(new FJsonValueObject(baroObj));
+        BarometerData.Add(baroValue);
+    }
+
+    /////////////////// GPS DATA ///////////////////
+
+    for (auto gpssensor : data.Sensors.GPSData) {
+
+        TSharedPtr<FJsonObject> gpsObj = MakeShareable(new FJsonObject);
+
+        TSharedPtr<FJsonObject> geoPoint = MakeShareable(new FJsonObject);
+
+        float eph = gpssensor.eph;
+        float epv = gpssensor.epv;
+        FJsonGeoPoint geopoint = gpssensor.geoPoint;
+        FVector velocity = gpssensor.velocity;
+
+        gpsObj->SetNumberField("EpochTimeStamp", gpssensor.EpochTimeStamp);
+
+        gpsObj->SetNumberField("Eph", eph);
+        gpsObj->SetNumberField("Epv", epv);
+
+        TArray<TSharedPtr<FJsonValue>> velocityValue;
+        velocityValue.Add(MakeShareable(new FJsonValueNumber(velocity.X)));
+        velocityValue.Add(MakeShareable(new FJsonValueNumber(velocity.Y)));
+        velocityValue.Add(MakeShareable(new FJsonValueNumber(velocity.Z)));
+        gpsObj->SetArrayField("Velocity", velocityValue);
+
+        geoPoint->SetNumberField("Altitude", geopoint.altitude);
+        geoPoint->SetNumberField("Latitude", geopoint.latitude);
+        geoPoint->SetNumberField("Longitude", geopoint.longitude);
+
+        gpsObj->SetObjectField("Geopoint", geoPoint);
+
+        TSharedRef<FJsonValueObject> gpsValue = MakeShareable(new FJsonValueObject(gpsObj));
+        GPSData.Add(gpsValue);
+    }
+
+    SensorsDataObj->SetArrayField("IMU", IMUData);
+    SensorsDataObj->SetArrayField("Magnetometer", MagnetometerData);
+    SensorsDataObj->SetArrayField("Barometer", BarometerData);
+    SensorsDataObj->SetArrayField("GPS", GPSData);
+
+    JsonObject->SetObjectField("Sensors", SensorsDataObj);
+#endif
 
     TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutputString);
     FJsonSerializer::Serialize(JsonObject.ToSharedRef(), Writer);

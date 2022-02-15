@@ -12,15 +12,28 @@ void UManualPoseController::initializeForPlay()
     backward_mapping_ = FInputAxisKeyMapping("inputManualBackward", EKeys::Down);
     up_mapping_ = FInputAxisKeyMapping("inputManualArrowUp", EKeys::PageUp);
     down_mapping_ = FInputAxisKeyMapping("inputManualArrowDown", EKeys::PageDown);
-    left_yaw_mapping_ = FInputAxisKeyMapping("inputManualLeftYaw", EKeys::A);
+    left_yaw_mapping_ = FInputAxisKeyMapping("inputManualLeftYaw", EKeys::Q);
     right_yaw_mapping_ = FInputAxisKeyMapping("inputManualRightYaw", EKeys::D);
-    left_roll_mapping_ = FInputAxisKeyMapping("inputManualLefRoll", EKeys::Q);
+    left_roll_mapping_ = FInputAxisKeyMapping("inputManualLefRoll", EKeys::A);
     right_roll_mapping_ = FInputAxisKeyMapping("inputManualRightRoll", EKeys::E);
-    up_pitch_mapping_ = FInputAxisKeyMapping("inputManualUpPitch", EKeys::W);
+    up_pitch_mapping_ = FInputAxisKeyMapping("inputManualUpPitch", EKeys::Z);
     down_pitch_mapping_ = FInputAxisKeyMapping("inputManualDownPitch", EKeys::S);
     inc_speed_mapping_ = FInputAxisKeyMapping("inputManualSpeedIncrease", EKeys::LeftShift);
     dec_speed_mapping_ = FInputAxisKeyMapping("inputManualSpeedDecrease", EKeys::LeftControl);
-    input_positive_ = inpute_negative_ = last_velocity_ = FVector::ZeroVector;
+
+    gamepad_left_mapping_ = FInputAxisKeyMapping("inputManualArrowLeft", EKeys::Gamepad_LeftStick_Left);
+    gamepad_right_mapping_ = FInputAxisKeyMapping("inputManualArrowRight", EKeys::Gamepad_LeftStick_Right);
+    gamepad_forward_mapping_ = FInputAxisKeyMapping("inputManualForward", EKeys::Gamepad_LeftStick_Up);
+    gamepad_backward_mapping_ = FInputAxisKeyMapping("inputManualBackward", EKeys::Gamepad_LeftStick_Down);
+    gamepad_up_mapping_ = FInputAxisKeyMapping("inputManualArrowUp", EKeys::Gamepad_LeftTrigger);
+    gamepad_down_mapping_ = FInputAxisKeyMapping("inputManualArrowDown", EKeys::Gamepad_RightTrigger);
+    gamepad_left_yaw_mapping_ = FInputAxisKeyMapping("inputManualLeftYaw", EKeys::Gamepad_RightStick_Left);
+    gamepad_right_yaw_mapping_ = FInputAxisKeyMapping("inputManualRightYaw", EKeys::Gamepad_RightStick_Right);
+    gamepad_up_pitch_mapping_ = FInputAxisKeyMapping("inputManualUpPitch", EKeys::Gamepad_RightStick_Up);
+    gamepad_down_pitch_mapping_ = FInputAxisKeyMapping("inputManualDownPitch", EKeys::Gamepad_RightStick_Down);
+    gamepad_inc_speed_mapping_ = FInputAxisKeyMapping("inputManualSpeedIncrease", EKeys::Gamepad_FaceButton_Bottom);
+    gamepad_dec_speed_mapping_ = FInputAxisKeyMapping("inputManualSpeedDecrease", EKeys::Gamepad_FaceButton_Right);
+    input_positive_ = input_negative_ = last_velocity_ = FVector::ZeroVector;
 }
 
 void UManualPoseController::clearBindings()
@@ -54,6 +67,7 @@ AActor* UManualPoseController::getActor() const
 void UManualPoseController::updateActorPose(float dt)
 {
     if (actor_ != nullptr) {
+
         updateDeltaPosition(dt);
 
         FVector location = actor_->GetActorLocation();
@@ -109,6 +123,31 @@ void UManualPoseController::removeInputBindings()
     if (dec_speed_binding_)
         UAirBlueprintLib::RemoveAxisBinding(dec_speed_mapping_, dec_speed_binding_, actor_);
 
+    if (left_binding_)
+        UAirBlueprintLib::RemoveAxisBinding(gamepad_left_mapping_, left_binding_, actor_);
+    if (right_binding_)
+        UAirBlueprintLib::RemoveAxisBinding(gamepad_right_mapping_, right_binding_, actor_);
+    if (forward_binding_)
+        UAirBlueprintLib::RemoveAxisBinding(gamepad_forward_mapping_, forward_binding_, actor_);
+    if (backward_binding_)
+        UAirBlueprintLib::RemoveAxisBinding(gamepad_backward_mapping_, backward_binding_, actor_);
+    if (up_binding_)
+        UAirBlueprintLib::RemoveAxisBinding(gamepad_up_mapping_, up_binding_, actor_);
+    if (down_binding_)
+        UAirBlueprintLib::RemoveAxisBinding(gamepad_down_mapping_, down_binding_, actor_);
+    if (left_yaw_binding_)
+        UAirBlueprintLib::RemoveAxisBinding(gamepad_left_yaw_mapping_, left_yaw_binding_, actor_);
+    if (right_yaw_binding_)
+        UAirBlueprintLib::RemoveAxisBinding(gamepad_right_yaw_mapping_, right_yaw_binding_, actor_);
+    if (up_pitch_binding_)
+        UAirBlueprintLib::RemoveAxisBinding(gamepad_up_pitch_mapping_, up_pitch_binding_, actor_);
+    if (down_pitch_binding_)
+        UAirBlueprintLib::RemoveAxisBinding(gamepad_down_pitch_mapping_, down_pitch_binding_, actor_);
+    if (inc_speed_binding_)
+        UAirBlueprintLib::RemoveAxisBinding(gamepad_inc_speed_mapping_, inc_speed_binding_, actor_);
+    if (dec_speed_binding_)
+        UAirBlueprintLib::RemoveAxisBinding(gamepad_dec_speed_mapping_, dec_speed_binding_, actor_);
+
     clearBindings();
 }
 
@@ -130,11 +169,24 @@ void UManualPoseController::setupInputBindings()
     down_pitch_binding_ = &UAirBlueprintLib::BindAxisToKey(down_pitch_mapping_, actor_, this, &UManualPoseController::inputManualDownPitch);
     inc_speed_binding_ = &UAirBlueprintLib::BindAxisToKey(inc_speed_mapping_, actor_, this, &UManualPoseController::inputManualSpeedIncrease);
     dec_speed_binding_ = &UAirBlueprintLib::BindAxisToKey(dec_speed_mapping_, actor_, this, &UManualPoseController::inputManualSpeedDecrease);
+
+    left_binding_ = &UAirBlueprintLib::BindAxisToKey(gamepad_left_mapping_, actor_, this, &UManualPoseController::inputManualLeft);
+    right_binding_ = &UAirBlueprintLib::BindAxisToKey(gamepad_right_mapping_, actor_, this, &UManualPoseController::inputManualRight);
+    forward_binding_ = &UAirBlueprintLib::BindAxisToKey(gamepad_forward_mapping_, actor_, this, &UManualPoseController::inputManualForward);
+    backward_binding_ = &UAirBlueprintLib::BindAxisToKey(gamepad_backward_mapping_, actor_, this, &UManualPoseController::inputManualBackward);
+    up_binding_ = &UAirBlueprintLib::BindAxisToKey(gamepad_up_mapping_, actor_, this, &UManualPoseController::inputManualMoveUp);
+    down_binding_ = &UAirBlueprintLib::BindAxisToKey(gamepad_down_mapping_, actor_, this, &UManualPoseController::inputManualDown);
+    left_yaw_binding_ = &UAirBlueprintLib::BindAxisToKey(gamepad_left_yaw_mapping_, actor_, this, &UManualPoseController::inputManualLeftYaw);
+    right_yaw_binding_ = &UAirBlueprintLib::BindAxisToKey(gamepad_right_yaw_mapping_, actor_, this, &UManualPoseController::inputManualRightYaw);
+    up_pitch_binding_ = &UAirBlueprintLib::BindAxisToKey(gamepad_up_pitch_mapping_, actor_, this, &UManualPoseController::inputManualUpPitch);
+    down_pitch_binding_ = &UAirBlueprintLib::BindAxisToKey(gamepad_down_pitch_mapping_, actor_, this, &UManualPoseController::inputManualDownPitch);
+    inc_speed_binding_ = &UAirBlueprintLib::BindAxisToKey(gamepad_inc_speed_mapping_, actor_, this, &UManualPoseController::inputManualSpeedIncrease);
+    dec_speed_binding_ = &UAirBlueprintLib::BindAxisToKey(gamepad_dec_speed_mapping_, actor_, this, &UManualPoseController::inputManualSpeedDecrease);
 }
 
 void UManualPoseController::updateDeltaPosition(float dt)
-{
-    FVector input = input_positive_ - inpute_negative_;
+{ 
+    FVector input = input_positive_ - input_negative_;
     if (!FMath::IsNearlyZero(input.SizeSquared())) {
         if (FMath::IsNearlyZero(acceleration_))
             last_velocity_ = input * speed_scaler_;
@@ -149,21 +201,26 @@ void UManualPoseController::updateDeltaPosition(float dt)
 
 void UManualPoseController::inputManualSpeedIncrease(float val)
 {
-    if (!FMath::IsNearlyEqual(val, 0.f))
+    if (!FMath::IsNearlyEqual(val, 0.f)) {
         speed_scaler_ += val * 20;
+    }
+
 }
 void UManualPoseController::inputManualSpeedDecrease(float val)
 {
-    if (!FMath::IsNearlyEqual(val, 0.f))
+    if (!FMath::IsNearlyEqual(val, 0.f)) {
         speed_scaler_ -= val * 20;
+    }
 
-    if (speed_scaler_ <= 0.0)
+    if (speed_scaler_ <= 0.0) {
         speed_scaler_ = 20.0;
+    }
+
 }
 
 void UManualPoseController::inputManualLeft(float val)
 {
-    inpute_negative_.Y = val;
+    input_negative_.Y = val;
 }
 void UManualPoseController::inputManualRight(float val)
 {
@@ -175,7 +232,7 @@ void UManualPoseController::inputManualForward(float val)
 }
 void UManualPoseController::inputManualBackward(float val)
 {
-    inpute_negative_.X = val;
+    input_negative_.X = val;
 }
 void UManualPoseController::inputManualMoveUp(float val)
 {
@@ -183,41 +240,41 @@ void UManualPoseController::inputManualMoveUp(float val)
 }
 void UManualPoseController::inputManualDown(float val)
 {
-    inpute_negative_.Z = val;
+    input_negative_.Z = val;
 }
 void UManualPoseController::inputManualLeftYaw(float val)
 {
-    val /= rotation_scaler;
+    val *= rotation_speed_scaler;
     if (!FMath::IsNearlyEqual(val, 0.f))
         delta_rotation_.Add(0, -val, 0);
 }
 void UManualPoseController::inputManualRightYaw(float val)
 {
-    val /= rotation_scaler;
+    val *= rotation_speed_scaler;
     if (!FMath::IsNearlyEqual(val, 0.f))
         delta_rotation_.Add(0, val, 0);
 }
 void UManualPoseController::inputManualLeftRoll(float val)
 {
-    val /= rotation_scaler;
+    val *= rotation_speed_scaler;
     if (!FMath::IsNearlyEqual(val, 0.f))
         delta_rotation_.Add(0, 0, -val);
 }
 void UManualPoseController::inputManualRightRoll(float val)
 {
-    val /= rotation_scaler;
+    val *= rotation_speed_scaler;
     if (!FMath::IsNearlyEqual(val, 0.f))
         delta_rotation_.Add(0, 0, val);
 }
 void UManualPoseController::inputManualUpPitch(float val)
 {
-    val /= rotation_scaler;
+    val *= rotation_speed_scaler;
     if (!FMath::IsNearlyEqual(val, 0.f))
         delta_rotation_.Add(val, 0, 0);
 }
 void UManualPoseController::inputManualDownPitch(float val)
 {
-    val /= rotation_scaler;
+    val *= rotation_speed_scaler;
     if (!FMath::IsNearlyEqual(val, 0.f))
         delta_rotation_.Add(-val, 0, 0);
 }

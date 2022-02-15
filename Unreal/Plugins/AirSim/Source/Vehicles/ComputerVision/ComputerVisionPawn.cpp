@@ -114,7 +114,10 @@ void AComputerVisionPawn::Tick(float Delta)
 
     //update ground level
     if (manual_pose_controller_->getActor() == this) {
-        manual_pose_controller_->updateActorPose(Delta);
+
+        float clock_speed = msr::airlib::AirSimSettings::singleton().clock_speed;
+
+        manual_pose_controller_->updateActorPose(Delta * clock_speed);
     }
 }
 

@@ -170,7 +170,8 @@ int main(int argc, const char* argv[])
 {
     //runDepthNavGT();
     //runDepthNavSGM();
-    runDataCollectorSGM(argc, argv);
+    //runDataCollectorSGM(argc, argv);
+    runStandAloneSensors(argc, argv);
 
     return 0;
 }

@@ -12,6 +12,7 @@
 #include "MultirotorPawnEvents.h"
 #include <future>
 
+
 class MultirotorPawnSimApi : public PawnSimApi
 {
 public:
@@ -86,4 +87,5 @@ private:
     Pose last_phys_pose_; //for trace lines showing vehicle path
     std::vector<std::string> vehicle_api_messages_;
     RotorStates rotor_states_;
+
 };

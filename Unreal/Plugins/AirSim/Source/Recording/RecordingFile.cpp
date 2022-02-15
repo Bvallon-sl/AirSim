@@ -11,7 +11,6 @@ void RecordingFile::appendRecord(const std::vector<msr::airlib::ImageCaptureBase
                                  msr::airlib::VehicleSimApiBase* vehicle_sim_api, int64 timestamp)
 {
 
-    bool save_success = false;
     int64 ts = IS_MICROSECONDS ? (timestamp / 1000) : timestamp;
 
     std::vector<ImageToSave> imagesFrame;
@@ -30,40 +29,11 @@ void RecordingFile::appendRecord(const std::vector<msr::airlib::ImageCaptureBase
         }
         //build image file name
         std::ostringstream image_file_name;
-        image_file_name << camera_name << "_" << ts << "_" << frameIndex;
+        image_file_name << camera_name << "_" << ts << "_" << std::setw(5) << std::setfill('0') << frameIndex;
         std::string extension = ".png";
         image_file_name << extension;
 
         std::string image_full_file_path = common_utils::FileSystem::combine(image_path_, image_file_name.str());
-
-#if 0
-        //write image file
-        try {
-            if (response.image_type == msr::airlib::ImageCaptureBase::ImageType::DepthPlanar) {
-                cv::Mat depth_image = cv::Mat(response.height, response.width, CV_32FC1, (float*)(response.image_data_float.data()));
-                cv::Mat depth_image_converted;
-                depth_image.convertTo(depth_image_converted, CV_16UC1);
-                cv::imwrite(image_full_file_path, depth_image_converted);
-
-            }
-            else if (response.image_type == msr::airlib::ImageCaptureBase::ImageType::Scene) {
-                cv::Mat image = cv::Mat(response.height, response.width, CV_8UC3, (unsigned char*)response.image_data_uint8.data());
-                cv::imwrite(image_full_file_path, image);
-
-
-                /* std::ofstream file(image_full_file_path, std::ios::binary);
-                file.write(reinterpret_cast<const char*>(response.image_data_uint8.data()), response.image_data_uint8.size());
-                file.close();*/
-            }
-
-            save_success = true;
-        }
-        catch (std::exception& ex) {
-            save_success = false;
-            UAirBlueprintLib::LogMessage(TEXT("Image file save failed"), FString(ex.what()), LogDebugLevel::Failure);
-        }
-
-#else
         ImageToSave imageToSave;
         imageToSave.height = response.height;
         imageToSave.width = response.width;
@@ -87,15 +57,12 @@ void RecordingFile::appendRecord(const std::vector<msr::airlib::ImageCaptureBase
         }
 
         imagesFrame.push_back(imageToSave);
-
-#endif
     }
 
     imagesToSave_.insert(std::pair<int64, std::vector<ImageToSave>>(ts, imagesFrame));
     timestamps_.push_back(ts);
 
     //write to JSON file
-
     PawnSimApi* pawn = static_cast<PawnSimApi*>(vehicle_sim_api);
     FJsonFramePoseData trackedPoseData;
     trackedPoseData.WorldPose = FJsonMatrix4x4(pawn->getCamera("Left")->GetActorTransform());
@@ -105,7 +72,10 @@ void RecordingFile::appendRecord(const std::vector<msr::airlib::ImageCaptureBase
     std::ostringstream fileName;
     fileName // << "SBS_"
         << "_"
-        << fdata.EpochTimeStamp << "_"
+        << fdata.EpochTimeStamp 
+        << "_" 
+        << std::setw(5) 
+        << std::setfill('0') 
         << frameIndex
         << ".png";
     fdata.ImageFileName = UTF8_TO_TCHAR(fileName.str().c_str());
@@ -125,13 +95,75 @@ void RecordingFile::appendRecord(const std::vector<msr::airlib::ImageCaptureBase
 
     data.Frames.Add(fdata);
 
-    /*if (msr::airlib::AirSimSettings::singleton().simmode_name == "Multirotor") {
-        auto vehicleAPI = static_cast<MultirotorPawnSimApi*>(pawn)->getVehicleApi();
-        //msr::airlib::ImuBase::Output imuData = vehicleAPI->getImuData("Imu");
-        // msr::airlib::BarometerBase::Output barometerData = vehicleAPI->getBarometerData("Barometer");
-        //UE_LOG(LogTemp, Warning, TEXT("baro, %f"), barometerData.pressure);
-    }*/
     frameIndex++;
+}
+
+void RecordingFile::appendSensorsData(msr::airlib::VehicleSimApiBase* vehicle_sim_api, int64 timestamp) 
+{
+
+    PawnSimApi* pawn = static_cast<PawnSimApi*>(vehicle_sim_api);
+    int64 ts = IS_MICROSECONDS ? (timestamp / 1000) : timestamp;
+
+    if (msr::airlib::AirSimSettings::singleton().simmode_name == "Multirotor") {
+
+        FJsonIMUData imuJsonData;
+        FJsonGPSData gpsJsonData;
+        FJsonBarometerData baroJsonData;
+        FJsonMagnometerData magnetoJsonData;
+
+        FTransform cam_pose = pawn->getCamera("Left")->GetActorTransform();
+        cam_pose.SetLocation(FVector::ZeroVector);
+
+        auto vehicleAPI = static_cast<MultirotorPawnSimApi*>(pawn)->getVehicleApi();
+
+        msr::airlib::ImuBase::Output imuData = vehicleAPI->getImuData("Imu");
+        msr::airlib::BarometerBase::Output barometerData = vehicleAPI->getBarometerData("Barometer");
+        msr::airlib::MagnetometerSimple::Output magnetometerData = vehicleAPI->getMagnetometerData("Magnetometer");
+        msr::airlib::GpsSimple::Output gpsData = vehicleAPI->getGpsData("Gps");
+
+        //UE_LOG(LogTemp, Warning, TEXT("IMU TS     %llu"), imuData.time_stamp);
+        //UE_LOG(LogTemp, Warning, TEXT("Magneto TS %llu"), magnetometerData.time_stamp);
+        //UE_LOG(LogTemp, Warning, TEXT("Baro TS    %llu"), barometerData.time_stamp);
+        //UE_LOG(LogTemp, Warning, TEXT("GPS TS     %llu"), gpsData.time_stamp);
+        //UE_LOG(LogTemp, Warning, TEXT("GPS UTC    %llu"), gpsData.gnss.time_utc);
+
+        FVector angularVelocity = FVector(imuData.angular_velocity.x(), imuData.angular_velocity.y(), imuData.angular_velocity.z());
+        imuJsonData.EpochTimeStamp = ts;
+        imuJsonData.angularVelocity = convertFromUUToUnityCoordinateSystem(worldToCam(cam_pose, angularVelocity), false);
+
+        FVector linearAcceleration = FVector(imuData.linear_acceleration.x(), imuData.linear_acceleration.y(), imuData.linear_acceleration.z());
+        imuJsonData.linearAcceleration = convertFromUUToUnityCoordinateSystem(worldToCam(cam_pose, linearAcceleration), false);
+
+        FQuat IMUOrientation = FQuat(imuData.orientation.x(), imuData.orientation.y(), imuData.orientation.z(), imuData.orientation.w());
+        imuJsonData.orientation = convertFromUUToUnityCoordinateSystem(FTransform(worldToCam(cam_pose, IMUOrientation))).GetRotation();
+
+        baroJsonData.EpochTimeStamp = ts;
+        baroJsonData.altitude = barometerData.altitude;
+        baroJsonData.pressure = barometerData.pressure;
+        baroJsonData.qnh = barometerData.qnh;
+
+        FVector magneticBody = FVector(magnetometerData.magnetic_field_body.x(), magnetometerData.magnetic_field_body.y(), magnetometerData.magnetic_field_body.z());
+        magnetoJsonData.EpochTimeStamp = ts;
+        magnetoJsonData.magneticFieldBody = convertFromUUToUnityCoordinateSystem(worldToCam(cam_pose, magneticBody), false);
+
+        //UE_LOG(LogTemp, Warning, TEXT("Size %i"), magnetometerData.magnetic_field_covariance.size());
+        for (int i = 0; i < magnetometerData.magnetic_field_covariance.size(); i++) {
+            magnetoJsonData.magneticFieldCovariance.Add(magnetometerData.magnetic_field_covariance[i]);
+        }
+
+        gpsJsonData.EpochTimeStamp = ts;
+        gpsJsonData.eph = gpsData.gnss.eph;
+        gpsJsonData.epv = gpsData.gnss.epv;
+        gpsJsonData.velocity = FVector(gpsData.gnss.velocity.x(), gpsData.gnss.velocity.y(), gpsData.gnss.velocity.z());
+        gpsJsonData.geoPoint.altitude = gpsData.gnss.geo_point.altitude;
+        gpsJsonData.geoPoint.latitude = gpsData.gnss.geo_point.latitude;
+        gpsJsonData.geoPoint.longitude = gpsData.gnss.geo_point.longitude;
+
+        data.Sensors.IMUData.Add(imuJsonData);
+        data.Sensors.magnetometerData.Add(magnetoJsonData);
+        data.Sensors.barometerData.Add(baroJsonData);
+        data.Sensors.GPSData.Add(gpsJsonData);
+    }
 }
 
 FJsonDataSet RecordingFile::getDataSet(){
@@ -209,16 +241,9 @@ FJsonSkeleton3DData RecordingFile::RetrieveSkeletonData(FTransform camPose, msr:
         AActor* ActorHit = Hit.GetActor();
 
         float dist = FVector::Distance(keypoint, Hit.ImpactPoint);
-        //UE_LOG(LogTemp, Warning, TEXT("target bone : %s  of index : %i || distance between impact and kp : %f || Threshold : %f"), *targetBone[idx].ToString(), idx, dist, occlusion_thresholds[idx]);
-
-        //if (targetBone[idx] == "LeftHand") {
-        //    UKismetSystemLibrary::DrawDebugSphere(detection.actor->GetWorld(), Hit.ImpactPoint, 15, 24, FColor::Red, 5, 2);
-        //    UE_LOG(LogTemp, Warning, TEXT("target bone : %s || impact : %s"), *keypoint.ToString(), *Hit.ImpactPoint.ToString());
-        //}
 
         if (ActorHit && ActorHit->GetName() == detection.actor->GetName() && dist < occlusion_thresholds[idx]) { // if the ray cast hits the correct joint and the correct actor, then it's visible
 
-            //UE_LOG(LogTemp, Warning, TEXT("%s is  visible"), *targetBone[idx].ToString());
             FVector local_position = boneSpaceTransforms[detection.skeletal_mesh->GetBoneIndex(targetBone[idx])].GetTranslation();
             FQuat local_orientation = boneSpaceTransforms[detection.skeletal_mesh->GetBoneIndex(targetBone[idx])].GetRotation();
 
@@ -228,9 +253,6 @@ FJsonSkeleton3DData RecordingFile::RetrieveSkeletonData(FTransform camPose, msr:
             skeleton_raw.keypoints.Add(convertFromUUToUnityCoordinateSystem(worldToCam(camPose, keypoint)));
         }
         else { // it's occluded
-
-            //UE_LOG(LogTemp, Warning, TEXT("%s is not visible"), *targetBone[idx].ToString());
-            //UE_LOG(LogTemp, Warning, TEXT("target bone : %s  of index : %i || distance between impact and kp : %f || Threshold : %f"), *targetBone[idx].ToString(), idx, dist, occlusion_thresholds[idx]);
 
             skeleton_raw.local_position_per_joint.Add(FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE));
             skeleton_raw.local_orientation_per_joint.Add(FQuat(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE, INVALID_VALUE));
@@ -354,6 +376,45 @@ std::vector<ImageToSave> RecordingFile::getImageToSave()
     return out;
 }
 
+void RecordingFile::saveImages()
+{
+    UAirBlueprintLib::LogMessage(TEXT("Saving images: "), TEXT("Started"), LogDebugLevel::Success);
+    int nb = 0;
+    std::map<int64, std::vector<ImageToSave>>::iterator it;
+    for (it = imagesToSave_.begin(); it != imagesToSave_.end(); it++) {
+        std::vector<ImageToSave> imagesFrame = it->second;
+        for (int i = 0; i < imagesFrame.size(); i++) {
+            ImageToSave image = imagesFrame[i];
+            if (image.image_type == (int)msr::airlib::ImageCaptureBase::ImageType::DepthPlanar) {
+                cv::Mat depth_image = cv::Mat(image.height, image.width, CV_32FC1, (float*)(image.image_data_float.data()));
+                cv::Mat depth_image_converted;
+                depth_image.convertTo(depth_image_converted, CV_16UC1);
+                cv::imwrite(image.image_full_file_path, depth_image_converted);
+                nb++;
+            }
+            else if (image.image_type == (int)msr::airlib::ImageCaptureBase::ImageType::Segmentation) {
+                cv::Mat mask = image.mask;
+                cv::imwrite(image.image_full_file_path, mask);
+                nb++;
+            }
+            else if (image.image_type == (int)msr::airlib::ImageCaptureBase::ImageType::Scene) {
+                cv::Mat scene = cv::Mat(image.height, image.width, CV_8UC3, (unsigned char*)image.image_data_uint8.data());
+                cv::imwrite(image.image_full_file_path, scene);
+
+                nb++;
+            }
+            UE_LOG(LogTemp, Warning, TEXT("Frame saved, %d / %d"), nb, imagesToSave_.size());
+        }
+    }
+    UAirBlueprintLib::LogMessage(TEXT("Saving images: "), TEXT("Finished"), LogDebugLevel::Success);
+    clearImageToSave();
+}
+
+void RecordingFile::clearImageToSave()
+{
+    imagesToSave_.clear();
+}
+
 bool RecordingFile::isFileOpen() const
 {
     return log_file_handle_ != nullptr;
@@ -412,7 +473,7 @@ void RecordingFile::startRecording(msr::airlib::VehicleSimApiBase* vehicle_sim_a
             meta.InvalidValue = INVALID_VALUE;
             meta.IsMicroseconds = IS_MICROSECONDS;
             meta.TargetFPS = 15;
-            meta.ZEDSerialNumber = 12345;
+            meta.ZEDSerialNumber = 510;
             meta.IsRealZED = false;
             meta.IsRectified = true;
             meta.SequenceID = sequence_id;
@@ -455,35 +516,8 @@ void RecordingFile::stopRecording(bool ignore_if_stopped)
 
         closeFile();
         UAirBlueprintLib::LogMessage(TEXT("Recording: "), TEXT("Stopped"), LogDebugLevel::Success);
-        UAirBlueprintLib::LogMessage(TEXT("Saving images: "), TEXT("Started"), LogDebugLevel::Success);
-        int nb = 0;
-        std::map<int64, std::vector<ImageToSave>>::iterator it;
-        for (it = imagesToSave_.begin(); it != imagesToSave_.end(); it++) {
-            std::vector<ImageToSave> imagesFrame = it->second;
-            for (int i = 0; i < imagesFrame.size(); i++) {
-                ImageToSave image = imagesFrame[i];
-                if (image.image_type == (int)msr::airlib::ImageCaptureBase::ImageType::DepthPlanar) {
-                    cv::Mat depth_image = cv::Mat(image.height, image.width, CV_32FC1, (float*)(image.image_data_float.data()));
-                    cv::Mat depth_image_converted;
-                    depth_image.convertTo(depth_image_converted, CV_16UC1);
-                    cv::imwrite(image.image_full_file_path, depth_image_converted);
-                    nb++;
-                }
-                else if (image.image_type == (int)msr::airlib::ImageCaptureBase::ImageType::Segmentation) {
-                    cv::Mat mask = image.mask;
-                    cv::imwrite(image.image_full_file_path, mask);
-                    nb++;
-                }
-                else if (image.image_type == (int)msr::airlib::ImageCaptureBase::ImageType::Scene) {
-                    cv::Mat scene = cv::Mat(image.height, image.width, CV_8UC3, (unsigned char*)image.image_data_uint8.data());
-                    cv::imwrite(image.image_full_file_path, scene);
-
-                    nb++;
-                }
-                UE_LOG(LogTemp, Warning, TEXT("Frame saved, %d / %d"), nb, imagesToSave_.size() * 4);
-            }
-        }
-        UAirBlueprintLib::LogMessage(TEXT("Saving images: "), TEXT("Finished"), LogDebugLevel::Success);
+        
+        saveImages();
     }
 
     UAirBlueprintLib::LogMessage(TEXT("Data saved to: "), FString(image_path_.c_str()), LogDebugLevel::Success);

@@ -11,8 +11,19 @@ std::unique_ptr<FRecordingThread> FRecordingThread::running_instance_;
 std::unique_ptr<FRecordingThread> FRecordingThread::finishing_instance_;
 msr::airlib::WorkerThreadSignal FRecordingThread::finishing_signal_;
 bool FRecordingThread::first_ = true;
+bool FRecordingThread::saving_ = false;
 
 WorldSimApi* FRecordingThread::world_sim_api_ = nullptr;
+
+
+// copy in binary mode
+bool copyFile(const char* SRC, const char* DEST)
+{
+    std::ifstream src(SRC, std::ios::binary);
+    std::ofstream dest(DEST, std::ios::binary);
+    dest << src.rdbuf();
+    return src && dest;
+}
 
 FRecordingThread::FRecordingThread()
     : stop_task_counter_(0), /* recording_file_(nullptr),*/ is_ready_(false)
@@ -52,22 +63,27 @@ void FRecordingThread::startRecording(WorldSimApi* world_sim_api, const Recordin
         running_instance_->image_captures_[vehicle_name] = vehicle_sim_api->getImageCapture();
         running_instance_->last_poses_[vehicle_name] = msr::airlib::Pose();
 
+#if SAVE_DETECTION
         CameraDetails camera_details("Left", vehicle_name, false);
         world_sim_api_->setDetectionFilterRadius(msr::airlib::ImageCaptureBase::ImageType::Scene, MAX_DISTANCE_METER * 100, camera_details);
         world_sim_api->addDetectionFilterMeshName(msr::airlib::ImageCaptureBase::ImageType::Scene, "person_*", camera_details);
+
+#endif
 
         running_instance_->recording_files_.insert(std::pair<std::string, std::unique_ptr<RecordingFile>>(vehicle_name, std::make_unique<RecordingFile>()));
         running_instance_->recording_files_.at(vehicle_name)->startRecording(vehicle_sim_api, sequence_id, settings.folder);
     }
 
     running_instance_->last_screenshot_on_ = 0;
+    running_instance_->last_screenshot_on_imu_ = 0;
 
-    //running_instance_->recording_file_.reset(new RecordingFile());
-    // Just need any 1 instance, to set the header line of the record file
-    //running_instance_->recording_file_->startRecording(*(vehicle_sim_apis.begin()), settings.folder);
 
     // Set is_ready at the end, setting this before can cause a race when the file isn't open yet
     running_instance_->is_ready_ = true;
+}
+
+void FRecordingThread::toggleImagesSaving() {
+    saving_ = !saving_;
 }
 
 FRecordingThread::~FRecordingThread()
@@ -110,7 +126,6 @@ void FRecordingThread::killRecording()
 void FRecordingThread::createMulticamCalibFile(std::vector<FJsonDataSet> data, std::string folder_path)
 {
     IPlatformFile& platform_file = FPlatformFileManager::Get().GetPlatformFile();
-
     // Calib file
     std::string calib_filepath = common_utils::FileSystem::getLogFileNamePath(folder_path, "../multicam_calib", "", ".json", false);
     FJsonMulticamCalib multicam_calib_file;
@@ -174,7 +189,6 @@ void FRecordingThread::createMulticamJsonFile(std::vector<FJsonDataSet> data, st
             FJsonFrameDetections fusedFrameDetection;
             for (FJsonDataSet dataset : data) { //foreach json
                 for (int j = 0; j < dataset.Frames[i].Detections.ObjectDetections.Num(); j++){
-                //for (FJsonSingleDetection singleDetection : dataset.Frames[i].Detections.ObjectDetections) { //foreach detection
 
                     FJsonSingleDetection singleDetection = dataset.Frames[i].Detections.ObjectDetections[j];
                     FTransform worlPose = dataset.Frames[i].TrackedPose.WorldPose.toTransform();
@@ -253,33 +267,60 @@ uint32 FRecordingThread::Run()
         //make sure all vars are set up
         if (is_ready_) {
             bool interval_elapsed = msr::airlib::ClockFactory::get()->elapsedSince(last_screenshot_on_) > settings_.record_interval;
+            bool interval_elapsed_imu = msr::airlib::ClockFactory::get()->elapsedSince(last_screenshot_on_imu_) > (1/500.0f);
             if (interval_elapsed) {
                 last_screenshot_on_ = msr::airlib::ClockFactory::get()->nowNanos();
 
-                world_sim_api_->pause(true);
+                if (vehicle_sim_apis_.mapSize() > 2)  world_sim_api_->pause(true);
+
                 for (const auto& vehicle_sim_api : vehicle_sim_apis_) {
                     const auto& vehicle_name = vehicle_sim_api->getVehicleName();
-                    FString string(vehicle_name.c_str());
+                    
+                    if (saving_) {
+                        world_sim_api_->pause(true);
+                        recording_files_.at(vehicle_name)->saveImages();
+                        saving_ = false;
+                        world_sim_api_->pause(false);
+                    }
+                    else {
+                        if (!settings_.record_on_move) {
 
-                    if (!settings_.record_on_move) {
+                            std::vector<ImageCaptureBase::ImageResponse> responses;
+                            image_captures_[vehicle_name]->getImages(settings_.requests[vehicle_name], responses);
+                            if (SAVE_DETECTION) {
 
-                        std::vector<ImageCaptureBase::ImageResponse> responses;
-
-                        image_captures_[vehicle_name]->getImages(settings_.requests[vehicle_name], responses);
-                        CameraDetails camera_details("Left", vehicle_name, false);
-                        detections_[vehicle_name] = world_sim_api_->getDetections_UU(msr::airlib::ImageCaptureBase::ImageType::Scene, camera_details);
-
-                        if (counter > nb_frames_before_log) {
-                            recording_files_.at(vehicle_name)->appendRecord(responses, detections_[vehicle_name], vehicle_sim_api, last_screenshot_on_);
+                                CameraDetails camera_details("Left", vehicle_name, false);
+                                detections_[vehicle_name] = world_sim_api_->getDetections_UU(msr::airlib::ImageCaptureBase::ImageType::Scene, camera_details);
+                            }
+                            if (counter > nb_frames_before_log) {
+                                recording_files_.at(vehicle_name)->appendRecord(responses, detections_[vehicle_name], vehicle_sim_api, last_screenshot_on_);
+                            }
                         }
                     }
+
                 }
-                world_sim_api_->pause(false);
                 UAirBlueprintLib::LogMessageString("time : ",
                                                    Utils::stringf("%f", msr::airlib::ClockFactory::get()->elapsedSince(last_screenshot_on_), ClockFactory::get()->getTrueScaleWrtWallClock()),
                                                    LogDebugLevel::Informational);
                 counter++;
             }
+            if (interval_elapsed_imu) {
+                last_screenshot_on_imu_ = msr::airlib::ClockFactory::get()->nowNanos();
+
+                if (vehicle_sim_apis_.mapSize() > 2) world_sim_api_->pause(true);
+
+                for (const auto& vehicle_sim_api : vehicle_sim_apis_) {
+                    const auto& vehicle_name = vehicle_sim_api->getVehicleName();
+
+                    if (!settings_.record_on_move) {
+
+                        if (counter > nb_frames_before_log) {
+                            recording_files_.at(vehicle_name)->appendSensorsData(vehicle_sim_api, last_screenshot_on_imu_);
+                        }
+                    }
+                }
+            }
+            if (vehicle_sim_apis_.mapSize() > 2) world_sim_api_->pause(false);
         }
     }
 
@@ -292,8 +333,19 @@ uint32 FRecordingThread::Run()
             folder_path = recording_file.second->getImagePath();
 	}
     
-    createMulticamJsonFile(datasets, folder_path);
+    if (datasets.size() > 1) createMulticamJsonFile(datasets, folder_path);
     createMulticamCalibFile(datasets, folder_path);
+
+    // copie settings file in folder
+    std::string settings_path = "C/Users/Benjamin/Documents/AirSim/settings.json";
+    std::string settings_dest = folder_path + "../settings.json";
+
+    bool b = copyFile(settings_path.c_str(), settings_dest.c_str());
+
+    if (!b) {
+        UE_LOG(LogTemp, Log, TEXT("Fail copying settings.json at %s"), settings_path.c_str());
+
+    }
 
     //recording_file_.reset();
     for (const auto& vehicle_sim_api : vehicle_sim_apis_)
