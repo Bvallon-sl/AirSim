@@ -506,11 +506,6 @@ void ASimModeBase::stopRecording()
     FRecordingThread::stopRecording();
 }
 
-void ASimModeBase::saveImages()
-{
-    FRecordingThread::toggleImagesSaving();
-}
-
 void ASimModeBase::startRecording()
 {
     FRecordingThread::startRecording(static_cast<WorldSimApi*>(this->world_sim_api_.get()), getSettings().recording_setting, getApiProvider()->getVehicleSimApis());

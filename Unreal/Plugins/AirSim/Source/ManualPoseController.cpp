@@ -153,7 +153,6 @@ void UManualPoseController::removeInputBindings()
 
 void UManualPoseController::setupInputBindings()
 {
-    UAirBlueprintLib::EnableInput(actor_);
 
     left_binding_ = &UAirBlueprintLib::BindAxisToKey(left_mapping_, actor_, this, &UManualPoseController::inputManualLeft);
     right_binding_ = &UAirBlueprintLib::BindAxisToKey(right_mapping_, actor_, this, &UManualPoseController::inputManualRight);

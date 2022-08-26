@@ -318,7 +318,7 @@ namespace airlib
         }
     };
 
-        struct Box2D_UU
+    struct Box2D_UU
     {
         FVector2D min;
         FVector2D max;
@@ -355,6 +355,7 @@ namespace airlib
         Box3D_UU box3D = Box3D_UU();
         FTransform relative_transform = FTransform();
         FQuat orientation = FQuat();
+        AActor* actor;
         USkeletalMeshComponent* skeletal_mesh;
 
         DetectionInfo_UU()

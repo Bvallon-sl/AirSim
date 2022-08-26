@@ -22,7 +22,6 @@ PawnSimApi::PawnSimApi(const Params& params)
 void PawnSimApi::initialize()
 {
     Kinematics::State initial_kinematic_state = Kinematics::State::zero();
-    ;
     initial_kinematic_state.pose = getPose();
     kinematics_.reset(new Kinematics(initial_kinematic_state));
 
@@ -137,6 +136,7 @@ void PawnSimApi::createCamerasFromSettings()
 
         //spawn and attach camera to pawn
         APIPCamera* camera = params_.pawn->GetWorld()->SpawnActor<APIPCamera>(params_.pip_camera_class, camera_transform, camera_spawn_params);
+        
         camera->AttachToComponent(bodyMesh, FAttachmentTransformRules::KeepRelativeTransform);
 
         //add on to our collection
@@ -428,6 +428,7 @@ PawnSimApi::Pose PawnSimApi::getPose() const
 {
     return toPose(getUUPosition(), getUUOrientation().Quaternion());
 }
+
 
 PawnSimApi::Pose PawnSimApi::toPose(const FVector& u_position, const FQuat& u_quat) const
 {

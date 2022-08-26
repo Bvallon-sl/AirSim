@@ -11,7 +11,6 @@ std::unique_ptr<FRecordingThread> FRecordingThread::running_instance_;
 std::unique_ptr<FRecordingThread> FRecordingThread::finishing_instance_;
 msr::airlib::WorkerThreadSignal FRecordingThread::finishing_signal_;
 bool FRecordingThread::first_ = true;
-bool FRecordingThread::saving_ = false;
 
 WorldSimApi* FRecordingThread::world_sim_api_ = nullptr;
 
@@ -59,6 +58,10 @@ void FRecordingThread::startRecording(WorldSimApi* world_sim_api, const Recordin
 
     for (const auto& vehicle_sim_api : vehicle_sim_apis) {
         auto vehicle_name = vehicle_sim_api->getVehicleName();
+        
+         MultirotorPawnSimApi* vehiclePawn = static_cast<MultirotorPawnSimApi*>(vehicle_sim_api);
+
+         SimpleFlightApi* simple_flight = static_cast<SimpleFlightApi*>(vehiclePawn->getVehicleApi());
 
         running_instance_->image_captures_[vehicle_name] = vehicle_sim_api->getImageCapture();
         running_instance_->last_poses_[vehicle_name] = msr::airlib::Pose();
@@ -67,7 +70,6 @@ void FRecordingThread::startRecording(WorldSimApi* world_sim_api, const Recordin
         CameraDetails camera_details("Left", vehicle_name, false);
         world_sim_api_->setDetectionFilterRadius(msr::airlib::ImageCaptureBase::ImageType::Scene, MAX_DISTANCE_METER * 100, camera_details);
         world_sim_api->addDetectionFilterMeshName(msr::airlib::ImageCaptureBase::ImageType::Scene, "person_*", camera_details);
-
 #endif
 
         running_instance_->recording_files_.insert(std::pair<std::string, std::unique_ptr<RecordingFile>>(vehicle_name, std::make_unique<RecordingFile>()));
@@ -75,15 +77,9 @@ void FRecordingThread::startRecording(WorldSimApi* world_sim_api, const Recordin
     }
 
     running_instance_->last_screenshot_on_ = 0;
-    running_instance_->last_screenshot_on_imu_ = 0;
-
 
     // Set is_ready at the end, setting this before can cause a race when the file isn't open yet
     running_instance_->is_ready_ = true;
-}
-
-void FRecordingThread::toggleImagesSaving() {
-    saving_ = !saving_;
 }
 
 FRecordingThread::~FRecordingThread()
@@ -141,9 +137,9 @@ void FRecordingThread::createMulticamCalibFile(std::vector<FJsonDataSet> data, s
             calib.serial = dataset.Metadata.ZEDSerialNumber;
             
             FTransform camera_transform = convertFromUnityToImageCoordinateSystem(dataset.InitialWorldPosition.toTransform());
-            calib.tx = camera_transform.GetLocation().X * 1000;
-            calib.ty = camera_transform.GetLocation().Y * 1000;
-            calib.tz = camera_transform.GetLocation().Z * 1000;
+            calib.tx = camera_transform.GetLocation().X /** 1000*/;
+            calib.ty = camera_transform.GetLocation().Y /** 1000*/;
+            calib.tz = camera_transform.GetLocation().Z /** 1000*/;
 
             FVector rot = convertMatrixToRot(camera_transform.ToMatrixWithScale());
 
@@ -203,13 +199,29 @@ void FRecordingThread::createMulticamJsonFile(std::vector<FJsonDataSet> data, st
                         fusedFrameSingleDetection.Position3D_World_Floor = singleDetection.Position3D_World_Floor;
                         fusedFrameSingleDetection.Velocity3D_MPS = singleDetection.Velocity3D_MPS;
 
-                        fusedFrameSingleDetection.Skeleton3D_Camera.global_root_orientation = camToWorld(worlPose, singleDetection.Skeleton3D_Camera.global_root_orientation);                            
+                        fusedFrameSingleDetection.GlobalRootOrientation = camToWorld(worlPose, singleDetection.GlobalRootOrientation);                            
 
                         for (int idx = 0; idx < (int)BODY_PARTS_POSE_34::LAST; idx++) {
-                      
-                            fusedFrameSingleDetection.Skeleton3D_Camera.keypoints.Add(camToWorld(worlPose, singleDetection.Skeleton3D_Camera.keypoints[idx]));
-                            fusedFrameSingleDetection.Skeleton3D_Camera.local_position_per_joint.Add(camToWorld(worlPose, singleDetection.Skeleton3D_Camera.local_position_per_joint[idx]));
-                            fusedFrameSingleDetection.Skeleton3D_Camera.local_orientation_per_joint.Add(camToWorld(worlPose, singleDetection.Skeleton3D_Camera.local_orientation_per_joint[idx])); 
+                            if (!isInvalidValue(singleDetection.Keypoints3D_34[idx])) {
+                                fusedFrameSingleDetection.Keypoints3D_34.Add(camToWorld(worlPose, singleDetection.Keypoints3D_34[idx]));
+                                fusedFrameSingleDetection.LocalPositionPerJoint.Add(camToWorld(worlPose, singleDetection.LocalPositionPerJoint[idx]));
+                                fusedFrameSingleDetection.LocalOrientationPerJoint.Add(camToWorld(worlPose, singleDetection.LocalOrientationPerJoint[idx])); 
+
+                            }
+                            else {
+                                fusedFrameSingleDetection.Keypoints3D_34.Add(FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE));
+                                fusedFrameSingleDetection.LocalPositionPerJoint.Add(FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE));
+                                fusedFrameSingleDetection.LocalOrientationPerJoint.Add(FQuat(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE, INVALID_VALUE));
+                            }
+                        }
+
+                        for (int idx = 0; idx < (int)BODY_PARTS_POSE_18::LAST; idx++) {
+                            if (!isInvalidValue(singleDetection.Keypoints3D[idx])) {
+                                fusedFrameSingleDetection.Keypoints3D.Add(camToWorld(worlPose, singleDetection.Keypoints3D[idx]));
+                            }
+                            else {
+                                fusedFrameSingleDetection.Keypoints3D.Add(FVector(INVALID_VALUE, INVALID_VALUE, INVALID_VALUE));
+                            }
                         }
 
                         detected_ids.Add(singleDetection.ObjectID, fusedFrameSingleDetection);
@@ -217,12 +229,23 @@ void FRecordingThread::createMulticamJsonFile(std::vector<FJsonDataSet> data, st
                     }
                     else {
                         for (int idx = 0; idx < (int)BODY_PARTS_POSE_34::LAST; idx++) {
-                            if (isInvalidValue(fusedFrameDetection.ObjectDetections[j].Skeleton3D_Camera.keypoints[idx])) {
-                                fusedFrameDetection.ObjectDetections[j].Skeleton3D_Camera.keypoints[idx] = (camToWorld(worlPose, singleDetection.Skeleton3D_Camera.keypoints[idx]));
-                                fusedFrameDetection.ObjectDetections[j].Skeleton3D_Camera.local_position_per_joint[idx] = (camToWorld(worlPose, singleDetection.Skeleton3D_Camera.local_position_per_joint[idx]));
-                                fusedFrameDetection.ObjectDetections[j].Skeleton3D_Camera.local_orientation_per_joint[idx] = (camToWorld(worlPose, singleDetection.Skeleton3D_Camera.local_orientation_per_joint[idx]));                         
+                            if (isInvalidValue(fusedFrameDetection.ObjectDetections[j].Keypoints3D_34[idx])) {
+                                if (!isInvalidValue(singleDetection.Keypoints3D_34[idx])) {
+                                    fusedFrameDetection.ObjectDetections[j].Keypoints3D_34[idx] = (camToWorld(worlPose, singleDetection.Keypoints3D_34[idx]));
+                                    fusedFrameDetection.ObjectDetections[j].LocalPositionPerJoint[idx] = (camToWorld(worlPose, singleDetection.LocalPositionPerJoint[idx]));
+                                    fusedFrameDetection.ObjectDetections[j].LocalOrientationPerJoint[idx] = (camToWorld(worlPose, singleDetection.LocalOrientationPerJoint[idx]));  
+                                }
                             }
                         }
+
+                        for (int idx = 0; idx < (int)BODY_PARTS_POSE_18::LAST; idx++) {
+                            if (isInvalidValue(fusedFrameDetection.ObjectDetections[j].Keypoints3D[idx])) {
+                                if (!isInvalidValue(singleDetection.Keypoints3D[idx])) {
+                                    fusedFrameDetection.ObjectDetections[j].Keypoints3D[idx] = (camToWorld(worlPose, singleDetection.Keypoints3D[idx]));
+                                }
+                            }
+                        }
+
                         fusedFrameDetection.ObjectDetections[j] = detected_ids[singleDetection.ObjectID];
                     }
                 }
@@ -258,6 +281,9 @@ bool FRecordingThread::Init()
         const auto& vehicle_name = vehicle_sim_api->getVehicleName();
         if (recording_files_.at(vehicle_name)) UAirBlueprintLib::LogMessage(TEXT("Initiated recording thread"), TEXT(""), LogDebugLevel::Success);
     }
+
+    chrono_save = 0;
+
     return true;
 }
 
@@ -266,65 +292,54 @@ uint32 FRecordingThread::Run()
     while (stop_task_counter_.GetValue() == 0) {
         //make sure all vars are set up
         if (is_ready_) {
+#if SAVE_SENSOR_DATA
+            if (!sensorsThreadReady) {
+                sensorsThread = new FSensorsThread(vehicle_sim_apis_);
+                sensorsThreadReady = true;
+            }
+#endif     
+
             bool interval_elapsed = msr::airlib::ClockFactory::get()->elapsedSince(last_screenshot_on_) > settings_.record_interval;
-            bool interval_elapsed_imu = msr::airlib::ClockFactory::get()->elapsedSince(last_screenshot_on_imu_) > (1/500.0f);
             if (interval_elapsed) {
+
                 last_screenshot_on_ = msr::airlib::ClockFactory::get()->nowNanos();
 
                 if (vehicle_sim_apis_.mapSize() > 2)  world_sim_api_->pause(true);
-
-                for (const auto& vehicle_sim_api : vehicle_sim_apis_) {
-                    const auto& vehicle_name = vehicle_sim_api->getVehicleName();
-                    
-                    if (saving_) {
-                        world_sim_api_->pause(true);
-                        recording_files_.at(vehicle_name)->saveImages();
-                        saving_ = false;
-                        world_sim_api_->pause(false);
-                    }
-                    else {
-                        if (!settings_.record_on_move) {
-
-                            std::vector<ImageCaptureBase::ImageResponse> responses;
-                            image_captures_[vehicle_name]->getImages(settings_.requests[vehicle_name], responses);
-                            if (SAVE_DETECTION) {
-
-                                CameraDetails camera_details("Left", vehicle_name, false);
-                                detections_[vehicle_name] = world_sim_api_->getDetections_UU(msr::airlib::ImageCaptureBase::ImageType::Scene, camera_details);
-                            }
-                            if (counter > nb_frames_before_log) {
-                                recording_files_.at(vehicle_name)->appendRecord(responses, detections_[vehicle_name], vehicle_sim_api, last_screenshot_on_);
-                            }
-                        }
-                    }
-
-                }
-                UAirBlueprintLib::LogMessageString("time : ",
-                                                   Utils::stringf("%f", msr::airlib::ClockFactory::get()->elapsedSince(last_screenshot_on_), ClockFactory::get()->getTrueScaleWrtWallClock()),
-                                                   LogDebugLevel::Informational);
-                counter++;
-            }
-            if (interval_elapsed_imu) {
-                last_screenshot_on_imu_ = msr::airlib::ClockFactory::get()->nowNanos();
-
-                if (vehicle_sim_apis_.mapSize() > 2) world_sim_api_->pause(true);
-
                 for (const auto& vehicle_sim_api : vehicle_sim_apis_) {
                     const auto& vehicle_name = vehicle_sim_api->getVehicleName();
 
                     if (!settings_.record_on_move) {
 
+                        std::vector<ImageCaptureBase::ImageResponse> responses;
+                        FString name(vehicle_name.c_str());
+                        image_captures_[vehicle_name]->getImages(settings_.requests[vehicle_name], responses);
+#if SAVE_DETECTION
+                        CameraDetails camera_details("Left", vehicle_name, false);
+                        detections_[vehicle_name] = world_sim_api_->getDetections_UU(msr::airlib::ImageCaptureBase::ImageType::Scene, camera_details);
+#endif
                         if (counter > nb_frames_before_log) {
-                            recording_files_.at(vehicle_name)->appendSensorsData(vehicle_sim_api, last_screenshot_on_imu_);
+                            recording_files_.at(vehicle_name)->appendRecord(responses, detections_[vehicle_name], vehicle_sim_api, last_screenshot_on_);
                         }
                     }
                 }
+                if (vehicle_sim_apis_.mapSize() > 2) world_sim_api_->pause(false);
+
+                UAirBlueprintLib::LogMessageString("time : ",
+                                                   Utils::stringf("%f", msr::airlib::ClockFactory::get()->elapsedSince(last_screenshot_on_), ClockFactory::get()->getTrueScaleWrtWallClock()),
+                                                   LogDebugLevel::Informational);
+                counter++;
             }
-            if (vehicle_sim_apis_.mapSize() > 2) world_sim_api_->pause(false);
         }
     }
+#if SAVE_SENSOR_DATA
+    sensorsThread->Stop();
 
-
+    for (const auto& vehicle_sim_api : vehicle_sim_apis_) {
+        const auto& vehicle_name = vehicle_sim_api->getVehicleName();
+        recording_files_.at(vehicle_name)->data.Sensors = sensorsThread->jsonSensorsData[vehicle_name];
+    }
+#endif
+  
 	std::vector<FJsonDataSet> datasets;
     std::string folder_path;
 	for (const auto& recording_file : recording_files_) {
@@ -333,20 +348,22 @@ uint32 FRecordingThread::Run()
             folder_path = recording_file.second->getImagePath();
 	}
     
-    if (datasets.size() > 1) createMulticamJsonFile(datasets, folder_path);
-    createMulticamCalibFile(datasets, folder_path);
-
-    // copie settings file in folder
-    std::string settings_path = "C/Users/Benjamin/Documents/AirSim/settings.json";
-    std::string settings_dest = folder_path + "../settings.json";
-
-    bool b = copyFile(settings_path.c_str(), settings_dest.c_str());
-
-    if (!b) {
-        UE_LOG(LogTemp, Log, TEXT("Fail copying settings.json at %s"), settings_path.c_str());
-
+    if (datasets.size() > 1) {
+        createMulticamJsonFile(datasets, folder_path);
+        createMulticamCalibFile(datasets, folder_path);
     }
 
+    // copie settings file in folder
+    std::string settings_path = "C:/Users/Benjamin/Documents/AirSim/settings.json";
+    std::string settings_dest = folder_path + "/../settings.json";
+
+     bool b = copyFile(settings_path.c_str(), settings_dest.c_str());
+
+    if (!b) {
+        FString filepath(settings_dest.c_str());
+        UE_LOG(LogTemp, Log, TEXT("Fail copying settings.json at %s"), *filepath);
+    }
+ 
     //recording_file_.reset();
     for (const auto& vehicle_sim_api : vehicle_sim_apis_)
     {

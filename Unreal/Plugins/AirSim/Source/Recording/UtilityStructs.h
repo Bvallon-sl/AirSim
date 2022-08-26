@@ -3,6 +3,7 @@
 #include <string>
 #include "CoreMinimal.h"
 #include "Engine/World.h"
+#include "common/AirSimSettings.hpp"
 #include "common/Common.hpp"
 #include "opencv2/core.hpp"
 #include <opencv2/opencv.hpp>
@@ -14,16 +15,10 @@
 #define INVALID_VALUE -999
 #define BBOX_MINIMUM_VOLUME 0.005
 #define MAX_DISTANCE_METER 40
+#define SENSORS_FREQUENCY 333.0f
 
-#define FRAMERATE 15
-
-#define __cx 960
-#define __cy 540
-#define __fx 1400
-#define __fy 1400
-
-#define SAVE_SENSOR_DATA 1
-#define SAVE_DETECTION 0
+#define SAVE_SENSOR_DATA 0
+#define SAVE_DETECTION 1
 
 
 enum class BODY_PARTS_POSE_34
@@ -65,46 +60,32 @@ enum class BODY_PARTS_POSE_34
     LAST = 34
 };
 
-//Name of bones of the skeleton rig //for carla/eric/... all unity's models
-/* const TArray<FName> targetBone = {
-    "hip",
-    "spine_01",
-    "spine_02",
-    "neck",
-    "shoulder_l",
-    "upperarm_l",
-    "lowerarm_l",
-    "hand_l",
-    "not_found", //left hand
-    "middle_end_l",
-    "thumb_end_l",
-    "shoulder_r",
-    "upperarm_r",
-    "lowerarm_r",
-    "hand_r",
-    "not_found", //right hand
-    "middle_end_r",
-    "thumb_end_r",
-    "upperleg_l",
-    "lowerleg_l",
-    "foot_l",
-    "foot_end_l",
-    "upperleg_r",
-    "lowerleg_r",
-    "foot_r",
-    "foot_end_r",
-    "head",
-    "not_found", //nose
-    "eye_l",
-    "not_found", //left ear
-    "eye_r",
-    "not_found", //right ear
-    "not_found", //left heel
-    "not_found"  //right heel
-};*/
+enum class BODY_PARTS_POSE_18
+{
+    NOSE = 0,
+    NECK = 1,
+    RIGHT_SHOULDER = 2,
+    RIGHT_ELBOW = 3,
+    RIGHT_WRIST = 4,
+    LEFT_SHOULDER = 5,
+    LEFT_ELBOW = 6,
+    LEFT_WRIST = 7,
+    RIGHT_HIP = 8,
+    RIGHT_KNEE = 9,
+    RIGHT_ANKLE = 10,
+    LEFT_HIP = 11,
+    LEFT_KNEE = 12,
+    LEFT_ANKLE = 13,
+    RIGHT_EYE = 14,
+    LEFT_EYE = 15,
+    RIGHT_EAR = 16,
+    LEFT_EAR = 17,
+    LAST = 18
+};
+
 
 //Name of bones of the skeleton rig // for mixamo's models
-const TArray<FName> targetBone = {
+const TArray<FName> targetBone_34 = {
     "Hips",
     "Spine1",
     "Spine2",
@@ -140,6 +121,29 @@ const TArray<FName> targetBone = {
     "not_found", //left heel
     "not_found" //right heel
 };
+
+//Name of bones of the skeleton rig // for mixamo's models
+const TArray<FName> targetBone_18 = {
+    "not_found", //nose
+    "Neck",
+    "RightArm",
+    "RightForeArm",
+    "RightHand",
+    "LeftArm",
+    "LeftForeArm",
+    "LeftHand",
+    "RightUpLeg",
+    "RightLeg",
+    "RightFoot",
+    "LeftUpLeg",
+    "LeftLeg",
+    "LeftFoot",
+    "RightEye",
+    "LeftEye",
+    "not_found", //right ear
+    "not_found" //left ear
+};
+
 
 const TArray<float> occlusion_thresholds = {
     20, //Hips
@@ -178,6 +182,189 @@ const TArray<float> occlusion_thresholds = {
     999
 };
 
+// enum to string fnct
+static FString enumToString(BODY_PARTS_POSE_34 joint)
+{
+    FString tostring;
+
+    switch (joint) {
+
+    case BODY_PARTS_POSE_34::PELVIS:
+        tostring = "PELVIS";
+        break;
+    case BODY_PARTS_POSE_34::NAVAL_SPINE:
+        tostring = "NAVAL_SPINE";
+        break;
+    case BODY_PARTS_POSE_34::CHEST_SPINE:
+        tostring = "CHEST_SPINE";
+        break;
+    case BODY_PARTS_POSE_34::NECK:
+        tostring = "NECK";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_CLAVICLE:
+        tostring = "LEFT_CLAVICLE";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_SHOULDER:
+        tostring = "LEFT_SHOULDER";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_ELBOW:
+        tostring = "LEFT_ELBOW";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_WRIST:
+        tostring = "LEFT_WRIST";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_HAND:
+        tostring = "LEFT_HAND";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_HANDTIP:
+        tostring = "LEFT_HANDTIP";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_THUMB:
+        tostring = "LEFT_THUMB";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_CLAVICLE:
+        tostring = "RIGHT_CLAVICLE";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_SHOULDER:
+        tostring = "RIGHT_SHOULDER";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_ELBOW:
+        tostring = "RIGHT_ELBOW";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_WRIST:
+        tostring = "RIGHT_WRIST";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_HAND:
+        tostring = "RIGHT_HAND";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_HANDTIP:
+        tostring = "RIGHT_HANDTIP";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_THUMB:
+        tostring = "RIGHT_THUMB";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_HIP:
+        tostring = "LEFT_HIP";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_KNEE:
+        tostring = "LEFT_KNEE";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_ANKLE:
+        tostring = "LEFT_ANKLE";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_FOOT:
+        tostring = "LEFT_FOOT";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_HIP:
+        tostring = "RIGHT_HIP";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_KNEE:
+        tostring = "RIGHT_KNEE";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_ANKLE:
+        tostring = "RIGHT_ANKLE";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_FOOT:
+        tostring = "RIGHT_FOOT";
+        break;
+    case BODY_PARTS_POSE_34::HEAD:
+        tostring = "HEAD";
+        break;
+    case BODY_PARTS_POSE_34::NOSE:
+        tostring = "NOSE";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_EYE:
+        tostring = "LEFT_EYE";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_EAR:
+        tostring = "LEFT_EAR";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_EYE:
+        tostring = "RIGHT_EYE";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_EAR:
+        tostring = "RIGHT_EAR";
+        break;
+    case BODY_PARTS_POSE_34::LEFT_HEEL:
+        tostring = "LEFT_HEEL";
+        break;
+    case BODY_PARTS_POSE_34::RIGHT_HEEL:
+        tostring = "RIGHT_HEEL";
+        break;
+    default:
+        tostring = "WRONG JOINT NAME";
+    }
+
+    return tostring;
+}
+
+static FString enumToString(BODY_PARTS_POSE_18 joint)
+{
+    FString tostring;
+
+    switch (joint) {
+
+    case BODY_PARTS_POSE_18::LEFT_SHOULDER:
+        tostring = "LEFT_SHOULDER";
+        break;
+    case BODY_PARTS_POSE_18::LEFT_ELBOW:
+        tostring = "LEFT_ELBOW";
+        break;
+
+    case BODY_PARTS_POSE_18::LEFT_WRIST:
+        tostring = "LEFT_WRIST";
+        break;
+    case BODY_PARTS_POSE_18::RIGHT_SHOULDER:
+        tostring = "RIGHT_SHOULDER";
+        break;
+    case BODY_PARTS_POSE_18::RIGHT_ELBOW:
+        tostring = "RIGHT_ELBOW";
+        break;
+    case BODY_PARTS_POSE_18::RIGHT_WRIST:
+        tostring = "RIGHT_WRIST";
+        break;
+    case BODY_PARTS_POSE_18::LEFT_HIP:
+        tostring = "LEFT_HIP";
+        break;
+    case BODY_PARTS_POSE_18::LEFT_KNEE:
+        tostring = "LEFT_KNEE";
+        break;
+    case BODY_PARTS_POSE_18::LEFT_ANKLE:
+        tostring = "LEFT_ANKLE";
+        break;
+    case BODY_PARTS_POSE_18::RIGHT_HIP:
+        tostring = "RIGHT_HIP";
+        break;
+    case BODY_PARTS_POSE_18::RIGHT_KNEE:
+        tostring = "RIGHT_KNEE";
+        break;
+    case BODY_PARTS_POSE_18::RIGHT_ANKLE:
+        tostring = "RIGHT_ANKLE";
+        break;
+    case BODY_PARTS_POSE_18::NOSE:
+        tostring = "NOSE";
+        break;
+    case BODY_PARTS_POSE_18::NECK:
+        tostring = "NECK";
+        break;
+    case BODY_PARTS_POSE_18::LEFT_EYE:
+        tostring = "LEFT_EYE";
+        break;
+    case BODY_PARTS_POSE_18::LEFT_EAR:
+        tostring = "LEFT_EAR";
+        break;
+    case BODY_PARTS_POSE_18::RIGHT_EYE:
+        tostring = "RIGHT_EYE";
+        break;
+    case BODY_PARTS_POSE_18::RIGHT_EAR:
+        tostring = "RIGHT_EAR";
+        break;
+    default:
+        tostring = "WRONG JOINT NAME";
+    }
+    return tostring;
+}
+
 static bool isInvalidValue(FVector in) {
     bool isInvalid = false;
 
@@ -210,6 +397,15 @@ static FVector warpPoint_(FVector pt_curr, const FMatrix path, float scale = 1)
     return proj3D;
 }
 
+static FVector2D projectPoint_(FVector pt, float fx, float fy, float cx, float cy) {
+    FVector2D pxl = FVector2D::ZeroVector;
+
+    pxl.X = (pt.X / pt.Z) * fx + cx;
+    pxl.Y = (pt.Y / pt.Z) * fy + cy;
+
+    return pxl;
+}
+
 static FVector convertFromImageToUnityCoordinateSystem(FVector in)
 {
     FVector out(in.X, - in.Y, in.Z);
@@ -218,9 +414,15 @@ static FVector convertFromImageToUnityCoordinateSystem(FVector in)
     return out;
 }
 
-static FVector convertFromUUToUnityCoordinateSystem(FVector in, bool convertUnity = true)
+static FVector convertFromImageToZEDIMUCoordinateSystem(FVector in)
 {
-    int factor = convertUnity ? 100 : 1;
+    FVector out(in.Y, in.X, -in.Z);
+    return out;
+}
+
+static FVector convertFromUUToUnityCoordinateSystem(FVector in, bool convertUnit = true)
+{
+    int factor = convertUnit ? 100 : 1;
     FVector out(in.Y, in.Z, in.X);
     out /= factor;
 
@@ -278,7 +480,7 @@ static FTransform convertFromUUToImageCoordinateSystem(FTransform in)
     coordTransf.SetIdentity(); // dest is IMAGE
 
     FTransform tf = FTransform(coordTransf.Inverse()) * FTransform(tmp);
-    FTransform out = tf * in * tf.Inverse();
+    FTransform out = tf * in * tf.Inverse(); 
 
     return out;
 }
@@ -438,8 +640,8 @@ public:
     int64 EpochTimeStamp;
     UPROPERTY()
     FVector magneticFieldBody; //in Gauss
-    UPROPERTY()
-    TArray<float> magneticFieldCovariance; //9 elements 3x3 matrix
+    //UPROPERTY()
+    //TArray<float> magneticFieldCovariance; //9 elements 3x3 matrix
 };
 
 USTRUCT()
@@ -492,6 +694,58 @@ public:
 
     UPROPERTY()
     TArray<FJsonIMUData> IMUData;
+};
+
+USTRUCT()
+struct FJsonIMUConfiguration
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    float GyroRandomWalk;
+
+    UPROPERTY()
+    float AngularNoiseDensity;
+
+    UPROPERTY()
+    float AccelNoiseDensity;
+
+    UPROPERTY()
+    float AccelRandomWalk;
+};
+
+USTRUCT()
+struct FJsonSensorsConfiguration
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    FJsonIMUConfiguration IMUConfiguration;
+
+};
+
+USTRUCT()
+struct FJsonCamerasConfiguration
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    float baseline;
+
+    UPROPERTY()
+    float fx;
+
+    UPROPERTY()
+    float fy;
+
+    UPROPERTY()
+    float cx;
+
+    UPROPERTY()
+    float cy;
 };
 
 
@@ -775,26 +1029,6 @@ public:
 };
 
 USTRUCT()
-struct FJsonSkeleton3DData
-{
-    GENERATED_BODY()
-
-public:
-
-    UPROPERTY()
-    FQuat global_root_orientation;
-
-    UPROPERTY()
-    TArray<FVector> keypoints;
-
-    UPROPERTY()
-    TArray<FVector> local_position_per_joint;
-
-    UPROPERTY()
-    TArray<FQuat> local_orientation_per_joint;
-};
-
-USTRUCT()
 struct FJsonSingleDetection
 {
     GENERATED_BODY()
@@ -828,7 +1062,53 @@ public:
     FJsonBoundingBox2DData BoundingBox2D_Raw;
 
     UPROPERTY()
-    FJsonSkeleton3DData Skeleton3D_Camera;
+    FQuat GlobalRootOrientation;
+
+    UPROPERTY()
+    TArray<FVector2D> Keypoints2D;
+
+    UPROPERTY()
+    TArray<FVector2D> Keypoints2D_34;
+
+    UPROPERTY()
+    TArray<FVector> Keypoints3D;
+
+    UPROPERTY()
+    TArray<FVector> Keypoints3D_34;
+
+    UPROPERTY()
+    TArray<FVector> LocalPositionPerJoint;
+
+    UPROPERTY()
+    TArray<FQuat> LocalOrientationPerJoint;
+};
+
+USTRUCT()
+struct FJsonSkeletonData
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    FQuat GlobalRootOrientation;
+
+    UPROPERTY()
+    TArray<FVector2D> Keypoints2D;
+
+    UPROPERTY()
+    TArray<FVector2D> Keypoints2D_34;
+
+    UPROPERTY()
+    TArray<FVector> Keypoints3D;
+
+    UPROPERTY()
+    TArray<FVector> Keypoints3D_34;
+
+    UPROPERTY()
+    TArray<FVector> LocalPositionPerJoint;
+
+    UPROPERTY()
+    TArray<FQuat> LocalOrientationPerJoint;
 };
 
 USTRUCT()
@@ -875,6 +1155,15 @@ public:
 
     UPROPERTY()
     FJsonMatrix4x4 InitialWorldPosition;
+
+    UPROPERTY()
+    FJsonCamerasConfiguration CamerasConfiguration;
+
+    UPROPERTY()
+    FJsonSensorsConfiguration SensorsConfiguration;
+
+    UPROPERTY()
+    FJsonGeoPoint GeoPoint;
 
     UPROPERTY()
     TArray<FJsonFrameData> Frames;
@@ -1014,6 +1303,39 @@ static FString SerializeJson(FJsonDataSet data)
 
     JsonObject->SetObjectField("InitialWorldPosition", InitialWorldPosition);
 
+    // Camera configuration
+
+    TSharedPtr<FJsonObject> CamerasConfiguration = MakeShareable(new FJsonObject);
+    CamerasConfiguration->SetNumberField("fx", data.CamerasConfiguration.fx);
+    CamerasConfiguration->SetNumberField("fy", data.CamerasConfiguration.fy);
+    CamerasConfiguration->SetNumberField("cx", data.CamerasConfiguration.cx);
+    CamerasConfiguration->SetNumberField("cy", data.CamerasConfiguration.cy);
+    CamerasConfiguration->SetNumberField("baseline", data.CamerasConfiguration.baseline);
+
+    JsonObject->SetObjectField("CamerasConfiguration", CamerasConfiguration);
+
+#if SAVE_SENSOR_DATA
+    TSharedPtr<FJsonObject> OriginGeoPoint = MakeShareable(new FJsonObject);
+
+    OriginGeoPoint->SetNumberField("Altitude", data.GeoPoint.altitude);
+    OriginGeoPoint->SetNumberField("Latitude", data.GeoPoint.latitude);
+    OriginGeoPoint->SetNumberField("Longitude", data.GeoPoint.longitude);
+
+    JsonObject->SetObjectField("OriginGeopoint", OriginGeoPoint);
+
+    TSharedPtr<FJsonObject> SensorsConfig = MakeShareable(new FJsonObject);
+    TSharedPtr<FJsonObject> IMUConfig = MakeShareable(new FJsonObject);
+
+    IMUConfig->SetNumberField("AngularNoiseDensity", data.SensorsConfiguration.IMUConfiguration.AngularNoiseDensity);
+    IMUConfig->SetNumberField("GyroRandomWalk", data.SensorsConfiguration.IMUConfiguration.GyroRandomWalk);
+    IMUConfig->SetNumberField("AccelNoiseDensity", data.SensorsConfiguration.IMUConfiguration.AccelNoiseDensity);
+    IMUConfig->SetNumberField("AccelRandomWalk", data.SensorsConfiguration.IMUConfiguration.AccelRandomWalk);
+
+    SensorsConfig->SetObjectField("IMUConfiguration", IMUConfig);
+
+    JsonObject->SetObjectField("SensorsConfiguration", SensorsConfig);
+#endif
+
     TArray<TSharedPtr<FJsonValue>> Frames;
     for(auto frame : data.Frames) {
 
@@ -1056,6 +1378,7 @@ static FString SerializeJson(FJsonDataSet data)
         TSharedPtr<FJsonObject> Detections = MakeShareable(new FJsonObject);
 
         TArray<TSharedPtr<FJsonValue>> ObjectDetections;
+
         for (auto detection : frame.Detections.ObjectDetections) 
         {
             TSharedPtr<FJsonObject> singleDetectionObj = MakeShareable(new FJsonObject);
@@ -1064,28 +1387,31 @@ static FString SerializeJson(FJsonDataSet data)
             singleDetectionObj->SetNumberField("ObjectType", detection.ObjectType);
 
             TArray<TSharedPtr<FJsonValue>> position3D;
-            position3D.Add(MakeShareable(new FJsonValueNumber(detection.Position3D_World_Floor[0])));
-            position3D.Add(MakeShareable(new FJsonValueNumber(detection.Position3D_World_Floor[1])));
-            position3D.Add(MakeShareable(new FJsonValueNumber(detection.Position3D_World_Floor[2])));
+            position3D.SetNum(3);
+            position3D[0] = (MakeShareable(new FJsonValueNumber(detection.Position3D_World_Floor[0])));
+            position3D[1] = (MakeShareable(new FJsonValueNumber(detection.Position3D_World_Floor[1])));
+            position3D[2] = (MakeShareable(new FJsonValueNumber(detection.Position3D_World_Floor[2])));
             singleDetectionObj->SetArrayField("Position3D_World_Floor", position3D);
 
             TArray<TSharedPtr<FJsonValue>> velocity3D;
-            velocity3D.Add(MakeShareable(new FJsonValueNumber(detection.Velocity3D_MPS[0])));
-            velocity3D.Add(MakeShareable(new FJsonValueNumber(detection.Velocity3D_MPS[1])));
-            velocity3D.Add(MakeShareable(new FJsonValueNumber(detection.Velocity3D_MPS[2])));
+            velocity3D.SetNum(3);
+            velocity3D[0] = (MakeShareable(new FJsonValueNumber(detection.Velocity3D_MPS[0])));
+            velocity3D[1] = (MakeShareable(new FJsonValueNumber(detection.Velocity3D_MPS[1])));
+            velocity3D[2] = (MakeShareable(new FJsonValueNumber(detection.Velocity3D_MPS[2])));
             singleDetectionObj->SetArrayField("Velocity3D_MPS", velocity3D);
 
             TArray<TSharedPtr<FJsonValue>> dimensions3D;
-            dimensions3D.Add(MakeShareable(new FJsonValueNumber(detection.Dimensions3D[0])));
-            dimensions3D.Add(MakeShareable(new FJsonValueNumber(detection.Dimensions3D[1])));
-            dimensions3D.Add(MakeShareable(new FJsonValueNumber(detection.Dimensions3D[2])));
+            dimensions3D.SetNum(3);
+            dimensions3D[0] = (MakeShareable(new FJsonValueNumber(detection.Dimensions3D[0])));
+            dimensions3D[1] = (MakeShareable(new FJsonValueNumber(detection.Dimensions3D[1])));
+            dimensions3D[2] = (MakeShareable(new FJsonValueNumber(detection.Dimensions3D[2])));
             singleDetectionObj->SetArrayField("Dimensions3D", dimensions3D);
 
             ////////////////////////////////////
             /// 2D DATA ////// /////////////////
             ////////////////////////////////////
-
-            TSharedPtr<FJsonObject> Bbox_2D = MakeShareable(new FJsonObject);
+            
+           TSharedPtr<FJsonObject> Bbox_2D = MakeShareable(new FJsonObject);
             TArray<TSharedPtr<FJsonValue>> A;
             A.Add(MakeShareable(new FJsonValueNumber(detection.BoundingBox2D.A[0])));
             A.Add(MakeShareable(new FJsonValueNumber(detection.BoundingBox2D.A[1])));
@@ -1131,6 +1457,7 @@ static FString SerializeJson(FJsonDataSet data)
 
             singleDetectionObj->SetObjectField("BoundingBox2D_Raw", Bbox_2D_Raw);
 
+
             ////////////////////////////////////
             /// 3D DATA ////////////////////////
             ////////////////////////////////////
@@ -1138,8 +1465,8 @@ static FString SerializeJson(FJsonDataSet data)
             ////////////////////////////////////
             /// BOUNDING BOX  //////////////////
             ////////////////////////////////////
-
-            TSharedPtr<FJsonObject> Bbox_3D = MakeShareable(new FJsonObject);
+           
+          TSharedPtr<FJsonObject> Bbox_3D = MakeShareable(new FJsonObject);
             A.Reset(3);
             A.Add(MakeShareable(new FJsonValueNumber(detection.BoundingBox3D_World.A[0])));
             A.Add(MakeShareable(new FJsonValueNumber(detection.BoundingBox3D_World.A[1])));
@@ -1241,53 +1568,85 @@ static FString SerializeJson(FJsonDataSet data)
 
             singleDetectionObj->SetObjectField("BoundingBox3D_World_Raw", Bbox_3D_Raw);
 
+            
             ////////////////////////////////////
             // SKELETON   //////////////////////
             ////////////////////////////////////
 
-            TSharedPtr<FJsonObject> Skeleton_Raw_3D = MakeShareable(new FJsonObject);
+            TArray<TSharedPtr<FJsonValue>> globalOrientation;
+            globalOrientation.Add(MakeShareable(new FJsonValueNumber(detection.GlobalRootOrientation.X)));
+            globalOrientation.Add(MakeShareable(new FJsonValueNumber(detection.GlobalRootOrientation.Y)));
+            globalOrientation.Add(MakeShareable(new FJsonValueNumber(detection.GlobalRootOrientation.Z)));
+            globalOrientation.Add(MakeShareable(new FJsonValueNumber(detection.GlobalRootOrientation.W)));
 
-            TArray<TSharedPtr<FJsonValue>> globalOrientationPerJoint;
-            globalOrientationPerJoint.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.global_root_orientation.X)));
-            globalOrientationPerJoint.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.global_root_orientation.Y)));
-            globalOrientationPerJoint.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.global_root_orientation.Z)));
-            globalOrientationPerJoint.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.global_root_orientation.W)));
-            Skeleton_Raw_3D->SetArrayField("Global_Root_Orientation", globalOrientationPerJoint);
-
-            TArray<TSharedPtr<FJsonValue>> LocalPositionPerJoint;
-            TArray<TSharedPtr<FJsonValue>> LocalOrientationPerJoint;
-            TArray<TSharedPtr<FJsonValue>> Keypoints;
-            for (int i = 0; i < detection.Skeleton3D_Camera.local_position_per_joint.Num(); i++) {
+            TSharedPtr<FJsonObject> LocalPositionPerJoint = MakeShareable(new FJsonObject);
+            TSharedPtr<FJsonObject> LocalOrientationPerJoint = MakeShareable(new FJsonObject);
+            TSharedPtr<FJsonObject> Keypoints3D_34 = MakeShareable(new FJsonObject);
+            for (int i = 0; i < detection.LocalPositionPerJoint.Num(); i++) {
             
                 TArray<TSharedPtr<FJsonValue>> joint_position;
-                joint_position.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_position_per_joint[i].X)));
-                joint_position.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_position_per_joint[i].Y)));
-                joint_position.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_position_per_joint[i].Z)));
+                joint_position.Add(MakeShareable(new FJsonValueNumber(detection.LocalPositionPerJoint[i].X)));
+                joint_position.Add(MakeShareable(new FJsonValueNumber(detection.LocalPositionPerJoint[i].Y)));
+                joint_position.Add(MakeShareable(new FJsonValueNumber(detection.LocalPositionPerJoint[i].Z)));
 
-                LocalPositionPerJoint.Add(MakeShareable(new FJsonValueArray(joint_position)));
+                LocalPositionPerJoint->SetArrayField(enumToString((BODY_PARTS_POSE_34)i), joint_position);
 
                 TArray<TSharedPtr<FJsonValue>> keypoints;
-                keypoints.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.keypoints[i].X)));
-                keypoints.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.keypoints[i].Y)));
-                keypoints.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.keypoints[i].Z)));
+                keypoints.Add(MakeShareable(new FJsonValueNumber(detection.Keypoints3D_34[i].X)));
+                keypoints.Add(MakeShareable(new FJsonValueNumber(detection.Keypoints3D_34[i].Y)));
+                keypoints.Add(MakeShareable(new FJsonValueNumber(detection.Keypoints3D_34[i].Z)));
 
-                Keypoints.Add(MakeShareable(new FJsonValueArray(keypoints)));
+                Keypoints3D_34->SetArrayField(enumToString((BODY_PARTS_POSE_34)i), keypoints);
 
                 TArray<TSharedPtr<FJsonValue>> joint_orientation;
-                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_orientation_per_joint[i].X)));
-                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_orientation_per_joint[i].Y)));
-                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_orientation_per_joint[i].Z)));
-                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.Skeleton3D_Camera.local_orientation_per_joint[i].W)));
+                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.LocalOrientationPerJoint[i].X)));
+                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.LocalOrientationPerJoint[i].Y)));
+                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.LocalOrientationPerJoint[i].Z)));
+                joint_orientation.Add(MakeShareable(new FJsonValueNumber(detection.LocalOrientationPerJoint[i].W)));
 
-                LocalOrientationPerJoint.Add(MakeShareable(new FJsonValueArray(joint_orientation)));
+                LocalOrientationPerJoint->SetArrayField(enumToString((BODY_PARTS_POSE_34)i), joint_orientation);
             }
 
-            Skeleton_Raw_3D->SetArrayField("Local_Position_Per_Joint", LocalPositionPerJoint);
-            Skeleton_Raw_3D->SetArrayField("Keypoints", Keypoints);
-            Skeleton_Raw_3D->SetArrayField("Local_Orientation_Per_Joint", LocalOrientationPerJoint);
+            TSharedPtr<FJsonObject> Keypoints3D = MakeShareable(new FJsonObject);
+            for (int i = 0; i < detection.Keypoints3D.Num(); i++) {
 
-            singleDetectionObj->SetObjectField("Skeleton3D_Camera", Skeleton_Raw_3D);
+                TArray<TSharedPtr<FJsonValue>> kp_3d;
+                kp_3d.Add(MakeShareable(new FJsonValueNumber(detection.Keypoints3D[i].X)));
+                kp_3d.Add(MakeShareable(new FJsonValueNumber(detection.Keypoints3D[i].Y)));
+                kp_3d.Add(MakeShareable(new FJsonValueNumber(detection.Keypoints3D[i].Z)));
 
+                Keypoints3D->SetArrayField(enumToString((BODY_PARTS_POSE_18)i), kp_3d);
+            }
+
+            TSharedPtr<FJsonObject> Keypoints2D_34 = MakeShareable(new FJsonObject);
+            for (int i = 0; i < detection.Keypoints2D_34.Num(); i++) {
+
+                TArray<TSharedPtr<FJsonValue>> kp_2d_34;
+                kp_2d_34.Add(MakeShareable(new FJsonValueNumber(detection.Keypoints2D_34[i].X)));
+                kp_2d_34.Add(MakeShareable(new FJsonValueNumber(detection.Keypoints2D_34[i].Y)));
+
+                Keypoints2D_34->SetArrayField(enumToString((BODY_PARTS_POSE_34)i), kp_2d_34);
+            }
+
+            TSharedPtr<FJsonObject> Keypoints2D = MakeShareable(new FJsonObject);
+            for (int i = 0; i < detection.Keypoints2D.Num(); i++) {
+
+                TArray<TSharedPtr<FJsonValue>> kp_2d;
+                kp_2d.Add(MakeShareable(new FJsonValueNumber(detection.Keypoints2D[i].X)));
+                kp_2d.Add(MakeShareable(new FJsonValueNumber(detection.Keypoints2D[i].Y)));
+
+                Keypoints2D->SetArrayField(enumToString((BODY_PARTS_POSE_18)i), kp_2d);
+            }
+
+            singleDetectionObj->SetObjectField("Keypoints3D_34", Keypoints3D_34);
+            singleDetectionObj->SetObjectField("Local_Position_Per_Joint", LocalPositionPerJoint);
+            singleDetectionObj->SetObjectField("Local_Orientation_Per_Joint", LocalOrientationPerJoint);
+            singleDetectionObj->SetArrayField("Global_Root_Orientation", globalOrientation);
+            singleDetectionObj->SetObjectField("Keypoints3D", Keypoints3D);
+            singleDetectionObj->SetObjectField("Keypoints2D", Keypoints2D);
+            singleDetectionObj->SetObjectField("Keypoints2D_34", Keypoints2D_34);
+
+            
             TSharedRef<FJsonValueObject> singleDetectionValue = MakeShareable(new FJsonValueObject(singleDetectionObj));
             ObjectDetections.Add(singleDetectionValue);
         }
@@ -1314,121 +1673,133 @@ static FString SerializeJson(FJsonDataSet data)
     TArray<TSharedPtr<FJsonValue>> GPSData;
 
     /////////////////// IMU DATA ///////////////////
-
     for (auto imusensor : data.Sensors.IMUData) {
 
-        TSharedPtr<FJsonObject> imuObj = MakeShareable(new FJsonObject);
-        imuObj->SetNumberField("EpochTimeStamp", imusensor.EpochTimeStamp);
-        FVector angVel = imusensor.angularVelocity;
-        TArray<TSharedPtr<FJsonValue>> angularVelocityValue;
-        angularVelocityValue.Add(MakeShareable(new FJsonValueNumber(angVel.X)));
-        angularVelocityValue.Add(MakeShareable(new FJsonValueNumber(angVel.Y)));
-        angularVelocityValue.Add(MakeShareable(new FJsonValueNumber(angVel.Z)));
-        imuObj->SetArrayField("AngularVelocity", angularVelocityValue);
+        if (imusensor.EpochTimeStamp != -1) {
+        
+            TSharedPtr<FJsonObject> imuObj = MakeShareable(new FJsonObject);
+            imuObj->SetNumberField("EpochTimeStamp", imusensor.EpochTimeStamp);
+            FVector angVel = imusensor.angularVelocity;
+            TArray<TSharedPtr<FJsonValue>> angularVelocityValue;
+            angularVelocityValue.Add(MakeShareable(new FJsonValueNumber(angVel.X)));
+            angularVelocityValue.Add(MakeShareable(new FJsonValueNumber(angVel.Y)));
+            angularVelocityValue.Add(MakeShareable(new FJsonValueNumber(angVel.Z)));
+            imuObj->SetArrayField("AngularVelocityRaw", angularVelocityValue);
 
-        FVector linearAccel = imusensor.linearAcceleration;
-        TArray<TSharedPtr<FJsonValue>> linearAccelerationValue;
-        linearAccelerationValue.Add(MakeShareable(new FJsonValueNumber(linearAccel.X)));
-        linearAccelerationValue.Add(MakeShareable(new FJsonValueNumber(linearAccel.Y)));
-        linearAccelerationValue.Add(MakeShareable(new FJsonValueNumber(linearAccel.Z)));
-        imuObj->SetArrayField("LinarAcceleration", linearAccelerationValue);
+            FVector linearAccel = imusensor.linearAcceleration;
+            TArray<TSharedPtr<FJsonValue>> linearAccelerationValue;
+            linearAccelerationValue.Add(MakeShareable(new FJsonValueNumber(linearAccel.X)));
+            linearAccelerationValue.Add(MakeShareable(new FJsonValueNumber(linearAccel.Y)));
+            linearAccelerationValue.Add(MakeShareable(new FJsonValueNumber(linearAccel.Z)));
+            imuObj->SetArrayField("LinearAccelerationRaw", linearAccelerationValue);
 
-        FQuat orientation = imusensor.orientation;
-        TArray<TSharedPtr<FJsonValue>> orientationValue;
-        orientationValue.Add(MakeShareable(new FJsonValueNumber(orientation.X)));
-        orientationValue.Add(MakeShareable(new FJsonValueNumber(orientation.Y)));
-        orientationValue.Add(MakeShareable(new FJsonValueNumber(orientation.Z)));
-        orientationValue.Add(MakeShareable(new FJsonValueNumber(orientation.W)));
-        imuObj->SetArrayField("Orientation", orientationValue);
+            FQuat orientation = imusensor.orientation;
+            TArray<TSharedPtr<FJsonValue>> orientationValue;
+            orientationValue.Add(MakeShareable(new FJsonValueNumber(orientation.X)));
+            orientationValue.Add(MakeShareable(new FJsonValueNumber(orientation.Y)));
+            orientationValue.Add(MakeShareable(new FJsonValueNumber(orientation.Z)));
+            orientationValue.Add(MakeShareable(new FJsonValueNumber(orientation.W)));
+            imuObj->SetArrayField("Orientation", orientationValue);
 
-        TSharedRef<FJsonValueObject> imuValue = MakeShareable(new FJsonValueObject(imuObj));
-        IMUData.Add(imuValue);
+            TSharedRef<FJsonValueObject> imuValue = MakeShareable(new FJsonValueObject(imuObj));
+
+            IMUData.Add(imuValue);
+        }
     }
+    if (IMUData.Num() > 0)
+        SensorsDataObj->SetArrayField("IMU", IMUData);
 
     /////////////////// MAGNETOMETER DATA ///////////////////
 
     for (auto magnetosensor : data.Sensors.magnetometerData) {
 
-        TSharedPtr<FJsonObject> magnetoObj = MakeShareable(new FJsonObject);
+        if (magnetosensor.EpochTimeStamp != -1) {
+            TSharedPtr<FJsonObject> magnetoObj = MakeShareable(new FJsonObject);
 
-        magnetoObj->SetNumberField("EpochTimeStamp", magnetosensor.EpochTimeStamp);
-        FVector magFieldBody = magnetosensor.magneticFieldBody;
-        TArray<TSharedPtr<FJsonValue>> magneticFieldBodyValue;
-        magneticFieldBodyValue.Add(MakeShareable(new FJsonValueNumber(magFieldBody.X)));
-        magneticFieldBodyValue.Add(MakeShareable(new FJsonValueNumber(magFieldBody.Y)));
-        magneticFieldBodyValue.Add(MakeShareable(new FJsonValueNumber(magFieldBody.Z)));
-        magnetoObj->SetArrayField("MagneticFieldBody", magneticFieldBodyValue);
+            magnetoObj->SetNumberField("EpochTimeStamp", magnetosensor.EpochTimeStamp);
+            FVector magFieldBody = magnetosensor.magneticFieldBody;
+            TArray<TSharedPtr<FJsonValue>> magneticFieldBodyValue;
+            magneticFieldBodyValue.Add(MakeShareable(new FJsonValueNumber(magFieldBody.X)));
+            magneticFieldBodyValue.Add(MakeShareable(new FJsonValueNumber(magFieldBody.Y)));
+            magneticFieldBodyValue.Add(MakeShareable(new FJsonValueNumber(magFieldBody.Z)));
+            magnetoObj->SetArrayField("MagneticFieldBody", magneticFieldBodyValue);
 
-        TArray<float> magFieldCovariance = magnetosensor.magneticFieldCovariance;
-        TArray<TSharedPtr<FJsonValue>> magneticFieldCovarianceValue;
+            //TArray<float> magFieldCovariance = magnetosensor.magneticFieldCovariance;
+            //TArray<TSharedPtr<FJsonValue>> magneticFieldCovarianceValue;
 
-        for (int i = 0; i < magnetosensor.magneticFieldCovariance.Num(); i++) {
-            magneticFieldCovarianceValue.Add(MakeShareable(new FJsonValueNumber(magFieldCovariance[i])));
+            //for (int i = 0; i < magnetosensor.magneticFieldCovariance.Num(); i++) {
+            //    magneticFieldCovarianceValue.Add(MakeShareable(new FJsonValueNumber(magFieldCovariance[i])));
+            //}
+
+            //magnetoObj->SetArrayField("MagneticFieldCovariance", magneticFieldCovarianceValue);
+
+            TSharedRef<FJsonValueObject> magnetoValue = MakeShareable(new FJsonValueObject(magnetoObj));
+            MagnetometerData.Add(magnetoValue);
         }
-
-        magnetoObj->SetArrayField("MagneticFieldCovariance", magneticFieldCovarianceValue);
-
-        TSharedRef<FJsonValueObject> magnetoValue = MakeShareable(new FJsonValueObject(magnetoObj));
-        MagnetometerData.Add(magnetoValue);
     }
+    if (MagnetometerData.Num() > 0)
+        SensorsDataObj->SetArrayField("Magnetometer", MagnetometerData);
 
     /////////////////// BAROMETER DATA ///////////////////
 
     for (auto barosensor : data.Sensors.barometerData) {
 
-        TSharedPtr<FJsonObject> baroObj = MakeShareable(new FJsonObject);
+        if (barosensor.EpochTimeStamp != -1) {
+            TSharedPtr<FJsonObject> baroObj = MakeShareable(new FJsonObject);
 
-        float altitude = barosensor.altitude;
-        float pressure = barosensor.pressure;
-        float qnh = barosensor.qnh;
+            float altitude = barosensor.altitude;
+            float pressure = barosensor.pressure;
+            float qnh = barosensor.qnh;
 
-        baroObj->SetNumberField("EpochTimeStamp", barosensor.EpochTimeStamp);
-        baroObj->SetNumberField("Altitude", altitude);
-        baroObj->SetNumberField("Pressure", pressure);
-        baroObj->SetNumberField("Qnh", qnh);
+            baroObj->SetNumberField("EpochTimeStamp", barosensor.EpochTimeStamp);
+            baroObj->SetNumberField("Altitude", altitude);
+            baroObj->SetNumberField("Pressure", pressure);
+            baroObj->SetNumberField("Qnh", qnh);
 
-        TSharedRef<FJsonValueObject> baroValue = MakeShareable(new FJsonValueObject(baroObj));
-        BarometerData.Add(baroValue);
+            TSharedRef<FJsonValueObject> baroValue = MakeShareable(new FJsonValueObject(baroObj));
+            BarometerData.Add(baroValue);
+        }
     }
+    if (BarometerData.Num() > 0)
+        SensorsDataObj->SetArrayField("Barometer", BarometerData);
 
     /////////////////// GPS DATA ///////////////////
 
     for (auto gpssensor : data.Sensors.GPSData) {
 
-        TSharedPtr<FJsonObject> gpsObj = MakeShareable(new FJsonObject);
+        if (gpssensor.EpochTimeStamp != -1) {
+            TSharedPtr<FJsonObject> gpsObj = MakeShareable(new FJsonObject);
 
-        TSharedPtr<FJsonObject> geoPoint = MakeShareable(new FJsonObject);
+            TSharedPtr<FJsonObject> geoPoint = MakeShareable(new FJsonObject);
 
-        float eph = gpssensor.eph;
-        float epv = gpssensor.epv;
-        FJsonGeoPoint geopoint = gpssensor.geoPoint;
-        FVector velocity = gpssensor.velocity;
+            float eph = gpssensor.eph;
+            float epv = gpssensor.epv;
+            FJsonGeoPoint geopoint = gpssensor.geoPoint;
+            FVector velocity = gpssensor.velocity;
 
-        gpsObj->SetNumberField("EpochTimeStamp", gpssensor.EpochTimeStamp);
+            gpsObj->SetNumberField("EpochTimeStamp", gpssensor.EpochTimeStamp);
 
-        gpsObj->SetNumberField("Eph", eph);
-        gpsObj->SetNumberField("Epv", epv);
+            gpsObj->SetNumberField("Eph", eph);
+            gpsObj->SetNumberField("Epv", epv);
 
-        TArray<TSharedPtr<FJsonValue>> velocityValue;
-        velocityValue.Add(MakeShareable(new FJsonValueNumber(velocity.X)));
-        velocityValue.Add(MakeShareable(new FJsonValueNumber(velocity.Y)));
-        velocityValue.Add(MakeShareable(new FJsonValueNumber(velocity.Z)));
-        gpsObj->SetArrayField("Velocity", velocityValue);
+            TArray<TSharedPtr<FJsonValue>> velocityValue;
+            velocityValue.Add(MakeShareable(new FJsonValueNumber(velocity.X)));
+            velocityValue.Add(MakeShareable(new FJsonValueNumber(velocity.Y)));
+            velocityValue.Add(MakeShareable(new FJsonValueNumber(velocity.Z)));
+            gpsObj->SetArrayField("Velocity", velocityValue);
 
-        geoPoint->SetNumberField("Altitude", geopoint.altitude);
-        geoPoint->SetNumberField("Latitude", geopoint.latitude);
-        geoPoint->SetNumberField("Longitude", geopoint.longitude);
+            geoPoint->SetNumberField("Latitude", geopoint.latitude);
+            geoPoint->SetNumberField("Longitude", geopoint.longitude);
+            geoPoint->SetNumberField("Altitude", geopoint.altitude);
 
-        gpsObj->SetObjectField("Geopoint", geoPoint);
+            gpsObj->SetObjectField("Geopoint", geoPoint);
 
-        TSharedRef<FJsonValueObject> gpsValue = MakeShareable(new FJsonValueObject(gpsObj));
-        GPSData.Add(gpsValue);
+            TSharedRef<FJsonValueObject> gpsValue = MakeShareable(new FJsonValueObject(gpsObj));
+            GPSData.Add(gpsValue);
+        }
     }
-
-    SensorsDataObj->SetArrayField("IMU", IMUData);
-    SensorsDataObj->SetArrayField("Magnetometer", MagnetometerData);
-    SensorsDataObj->SetArrayField("Barometer", BarometerData);
-    SensorsDataObj->SetArrayField("GPS", GPSData);
+    if (GPSData.Num() > 0)
+        SensorsDataObj->SetArrayField("GPS", GPSData);
 
     JsonObject->SetObjectField("Sensors", SensorsDataObj);
 #endif
@@ -1437,121 +1808,4 @@ static FString SerializeJson(FJsonDataSet data)
     FJsonSerializer::Serialize(JsonObject.ToSharedRef(), Writer);
 
     return OutputString;
-}
-
-static FJsonBoundingBox3DData compute3DBoxesFrom2D(APIPCamera* camera, FJsonBoundingBox2DData box2D, msr::airlib::DetectionInfo_UU detection)
-{
-    FJsonBoundingBox3DData box_3d;
-    FTransform cam_pose = convertFromUnityToImageCoordinateSystem(convertFromUUToUnityCoordinateSystem(camera->getUUPose())); // to image
-
-    float left = box2D.A.X;
-    float top = box2D.A.Y;
-    float right = box2D.C.X;
-    float bot = box2D.C.Y;
-
-    float root_depth = convertFromUUToImageCoordinateSystem(detection.relative_transform.GetTranslation()).Z; 
-
-    FVector A, B, C, D;
-
-    A.X = ((left - __cx) / __fx) * root_depth;
-    A.Y = ((top - __cy) / __fy) * root_depth;
-    A.Z = root_depth;
-    B.X = ((right - __cx) / __fx) * root_depth;
-    B.Y = ((top - __cy) / __fy) * root_depth;
-    B.Z = root_depth;
-    C.X = ((right - __cx) / __fx) * root_depth;
-    C.Y = ((bot - __cy) / __fy) * root_depth;
-    C.Z = root_depth;
-    D.X = ((left - __cx) / __fx) * root_depth;
-    D.Y = ((bot - __cy) / __fy) * root_depth;
-    D.Z = root_depth;
-
-    float AB_dist = FVector::Distance(A, B);
-    float far_plane_depth = root_depth + AB_dist * 0.5f;
-    float close_plane_depth = root_depth - AB_dist * 0.5f;
-
-    FVector A1, B1, C1, D1;
-    FVector A2, B2, C2, D2;
-
-    A1 = A;
-    A1.Z = close_plane_depth;
-    B1 = B;
-    B1.Z = close_plane_depth;
-    C1 = C;
-    C1.Z = close_plane_depth;
-    D1 = D;
-    D1.Z = close_plane_depth;
-
-    A2 = A;
-    A2.Z = far_plane_depth;
-    B2 = B;
-    B2.Z = far_plane_depth;
-    C2 = C;
-    C2.Z = far_plane_depth;
-    D2 = D;
-    D2.Z = far_plane_depth;
-
-    box_3d.A = A1;
-    box_3d.B = A2;
-    box_3d.C = B2;
-    box_3d.D = B1;
-    box_3d.E = D1;
-    box_3d.F = D2;
-    box_3d.G = C2;
-    box_3d.H = C1;
-
-    FVector root_position_tmp = convertFromUUToImageCoordinateSystem(detection.relative_transform.GetTranslation());
-    FTransform tf_gravity =  cam_pose;
-
-    tf_gravity.SetTranslation(FVector::ZeroVector);
-
-    // Remove yaw
-    FVector vec = tf_gravity.GetRotation().Euler();
-    vec.Y = 0;
-    tf_gravity.SetRotation(FQuat::MakeFromEuler(vec));
-    ///
-
-    FMatrix mat_gravity = tf_gravity.Inverse().ToMatrixWithScale().GetTransposed();
-    
-    box_3d.A -= root_position_tmp;
-    box_3d.A = warpPoint_(box_3d.A, mat_gravity);
-    box_3d.A += root_position_tmp;
-    box_3d.A = convertFromImageToUnityCoordinateSystem(camToWorld(cam_pose, box_3d.A));
-
-    box_3d.B -= root_position_tmp;
-    box_3d.B = warpPoint_(box_3d.B, mat_gravity);
-    box_3d.B += root_position_tmp;
-    box_3d.B = convertFromImageToUnityCoordinateSystem(camToWorld(cam_pose, box_3d.B));
-
-    box_3d.C -= root_position_tmp;
-    box_3d.C = warpPoint_(box_3d.C, mat_gravity);
-    box_3d.C += root_position_tmp;
-    box_3d.C = convertFromImageToUnityCoordinateSystem(camToWorld(cam_pose, box_3d.C));
-
-    box_3d.D -= root_position_tmp;
-    box_3d.D = warpPoint_(box_3d.D, mat_gravity);
-    box_3d.D += root_position_tmp;
-    box_3d.D = convertFromImageToUnityCoordinateSystem(camToWorld(cam_pose, box_3d.D));
-
-    box_3d.E -= root_position_tmp;
-    box_3d.E = warpPoint_(box_3d.E, mat_gravity);
-    box_3d.E += root_position_tmp;
-    box_3d.E = convertFromImageToUnityCoordinateSystem(camToWorld(cam_pose, box_3d.E));
-
-    box_3d.F -= root_position_tmp;
-    box_3d.F = warpPoint_(box_3d.F, mat_gravity);
-    box_3d.F += root_position_tmp;
-    box_3d.F = convertFromImageToUnityCoordinateSystem(camToWorld(cam_pose, box_3d.F));
-
-    box_3d.G -= root_position_tmp;
-    box_3d.G = warpPoint_(box_3d.G, mat_gravity);
-    box_3d.G += root_position_tmp;
-    box_3d.G = convertFromImageToUnityCoordinateSystem(camToWorld(cam_pose, box_3d.G));
-
-    box_3d.H -= root_position_tmp;
-    box_3d.H = warpPoint_(box_3d.H, mat_gravity);
-    box_3d.H += root_position_tmp;
-    box_3d.H = convertFromImageToUnityCoordinateSystem(camToWorld(cam_pose, box_3d.H));
-
-    return box_3d;
 }

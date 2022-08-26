@@ -75,11 +75,6 @@ void ASimHUD::inputEventToggleRecording()
     toggleRecordHandler();
 }
 
-void ASimHUD::inputEventToggleImagesSave()
-{
-    simmode_->saveImages();
-}
-
 void ASimHUD::inputEventToggleReport()
 {
     simmode_->EnableReport = !simmode_->EnableReport;
@@ -243,9 +238,6 @@ void ASimHUD::setupInputBindings()
     UAirBlueprintLib::BindActionToKey("InputEventToggleReport", EKeys::Semicolon, this, &ASimHUD::inputEventToggleReport);
     UAirBlueprintLib::BindActionToKey("InputEventToggleHelp", EKeys::F1, this, &ASimHUD::inputEventToggleHelp);
     UAirBlueprintLib::BindActionToKey("InputEventToggleTrace", EKeys::T, this, &ASimHUD::inputEventToggleTrace);
-
-    UAirBlueprintLib::BindActionToKey("inputEventToggleImageSaving", EKeys::SpaceBar, this, &ASimHUD::inputEventToggleImagesSave);
-
 
     UAirBlueprintLib::BindActionToKey("InputEventToggleSubwindow0", EKeys::One, this, &ASimHUD::inputEventToggleSubwindow0);
     UAirBlueprintLib::BindActionToKey("InputEventToggleSubwindow1", EKeys::Two, this, &ASimHUD::inputEventToggleSubwindow1);

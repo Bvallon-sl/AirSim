@@ -69,7 +69,6 @@ public:
 
     virtual void startRecording();
     virtual void stopRecording();
-    virtual void saveImages();
     virtual bool isRecording() const;
 
     void startApiServer();

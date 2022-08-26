@@ -21,6 +21,7 @@ NedTransform::NedTransform(const AActor* pivot, const FTransform& global_transfo
 
         FVector ground_offset = FVector(0, 0, mesh_bounds.Z);
         local_ned_offset_ = pivot->GetActorLocation() - ground_offset;
+        UE_LOG(LogTemp, Warning, TEXT("local ned offset %s"), *local_ned_offset_.ToString());
     }
     else
         local_ned_offset_ = FVector::ZeroVector;

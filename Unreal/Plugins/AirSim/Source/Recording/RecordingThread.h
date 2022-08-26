@@ -13,6 +13,9 @@
 #include "common/WorkerThread.hpp"
 #include "SimMode/SimModeBase.h"
 #include "WorldSimApi.h"
+#include "vehicles/multirotor/firmwares/simple_flight/SimpleFlightApi.hpp"
+
+#include "SensorsThread.h"
 
 #include <string>
 #include <fstream>
@@ -36,8 +39,6 @@ public:
     static void killRecording();
     static bool isRecording();
 
-    static void toggleImagesSaving();
-
 protected:
     virtual bool Init() override;
     virtual uint32 Run() override;
@@ -50,6 +51,9 @@ private:
     static void createMulticamCalibFile(std::vector<FJsonDataSet> data, std::string folder_path);
 
     FThreadSafeCounter stop_task_counter_;
+
+    FSensorsThread* sensorsThread = nullptr;
+    bool sensorsThreadReady = false;
 
     static std::unique_ptr<FRecordingThread> running_instance_;
     static std::unique_ptr<FRecordingThread> finishing_instance_;
@@ -70,11 +74,10 @@ private:
     std::unordered_map<std::string, msr::airlib::Pose> last_poses_;
 
     msr::airlib::TTimePoint last_screenshot_on_;
-    msr::airlib::TTimePoint last_screenshot_on_imu_;
+
+    msr::airlib::TTimeDelta chrono_save;
     bool is_ready_;
     static WorldSimApi* world_sim_api_;
-
-    static bool saving_;
 
     int counter = 0;
     int nb_frames_before_log = 2;

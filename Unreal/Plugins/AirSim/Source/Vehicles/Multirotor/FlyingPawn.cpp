@@ -28,12 +28,24 @@ void AFlyingPawn::initializeForBeginPlay()
         (UAirBlueprintLib::GetActorComponent<UChildActorComponent>(this, TEXT("BackCenterCamera")))->GetChildActor());
     camera_bottom_center_ = Cast<APIPCamera>(
         (UAirBlueprintLib::GetActorComponent<UChildActorComponent>(this, TEXT("BottomCenterCamera")))->GetChildActor());
+
+    manual_pose_controller_ = NewObject<UManualPoseController>(this, "FlyingPawn_ManualPoseController");
+    manual_pose_controller_->initializeForPlay();
+    manual_pose_controller_->setActor(this);
 }
 
 void AFlyingPawn::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     pawn_events_.getPawnTickSignal().emit(DeltaSeconds);
+
+    //update ground level
+    //if (manual_pose_controller_->getActor() == this) {
+
+    //    float clock_speed = msr::airlib::AirSimSettings::singleton().clock_speed;
+
+    //    manual_pose_controller_->updateActorPose(DeltaSeconds * clock_speed);
+    //}
 }
 
 void AFlyingPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -43,6 +55,8 @@ void AFlyingPawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
     camera_front_center_ = nullptr;
     camera_back_center_ = nullptr;
     camera_bottom_center_ = nullptr;
+
+    manual_pose_controller_ = nullptr;
 
     pawn_events_.getActuatorSignal().disconnect_all();
     rotating_movements_.Empty();

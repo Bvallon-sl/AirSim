@@ -4,6 +4,8 @@
 #include "UnrealSensors/UnrealSensorFactory.h"
 #include <exception>
 
+#include <opencv2/opencv.hpp>
+
 using namespace msr::airlib;
 
 MultirotorPawnSimApi::MultirotorPawnSimApi(const Params& params)
@@ -39,13 +41,13 @@ void MultirotorPawnSimApi::initialize()
     VectorMath::toEulerianAngle(pose.orientation, pitch, roll, yaw);
     pose.orientation = VectorMath::toQuaternion(0, 0, yaw);
     setPose(pose, false);
+
 }
 
 void MultirotorPawnSimApi::pawnTick(float dt)
 {
     unused(dt);
     //calls to update* are handled by physics engine and in SimModeWorldBase
-
 }
 
 void MultirotorPawnSimApi::updateRenderedState(float dt)

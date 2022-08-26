@@ -8,6 +8,8 @@
 #include "common/common_utils/UniqueValueMap.hpp"
 #include "MultirotorPawnEvents.h"
 
+#include "ManualPoseController.h"
+
 #include "FlyingPawn.generated.h"
 
 UCLASS()
@@ -55,4 +57,7 @@ private: //variables
 
     MultirotorPawnEvents pawn_events_;
     int init_id_;
+
+    UPROPERTY()
+    UManualPoseController* manual_pose_controller_;
 };

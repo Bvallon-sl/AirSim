@@ -12,7 +12,6 @@
 #include "MultirotorPawnEvents.h"
 #include <future>
 
-
 class MultirotorPawnSimApi : public PawnSimApi
 {
 public:
@@ -88,4 +87,5 @@ private:
     std::vector<std::string> vehicle_api_messages_;
     RotorStates rotor_states_;
 
+    char key = ' ';
 };

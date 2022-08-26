@@ -203,7 +203,6 @@ Some methods may not be applicable to specific vehicle in which case an exceptio
             }
         };
 
-    private:
         const SensorBase* findSensorByName(const std::string& sensor_name, const SensorBase::SensorType type) const
         {
             const SensorBase* sensor = nullptr;

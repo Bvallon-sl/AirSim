@@ -417,12 +417,52 @@ void APIPCamera::updateCaptureComponentSetting(USceneCaptureComponent2D* capture
         render_target->TargetGamma = setting.target_gamma;
 
     capture->ProjectionType = static_cast<ECameraProjectionMode::Type>(setting.projection_mode);
+    
 
     if (!std::isnan(setting.fov_degrees))
         capture->FOVAngle = setting.fov_degrees;
     if (capture->ProjectionType == ECameraProjectionMode::Orthographic && !std::isnan(setting.ortho_width))
         capture->OrthoWidth = ned_transform.fromNed(setting.ortho_width);
+    if ((setting.cx != setting.width / 2) || (setting.cy != setting.height / 2)) {
+        capture->bEnableClipPlane = true;
+        capture->bUseCustomProjectionMatrix = true;
 
+        const float NearPlane = 0;
+        const float FarPlane = WORLD_MAX / 8.0f;
+
+        const int width = setting.width;
+        const int height = setting.height;
+        const int cx = setting.cx;
+        const int cy = setting.cy;
+
+        float hfovrad = 2 * atan(width / (2 * setting.fx));
+        float vfovrad = 2 * atan(height / (2 * setting.fy));
+
+        FMatrix projMatrix;
+        projMatrix.M[0][0] = 1.0 / tan(hfovrad * 0.5f);
+        projMatrix.M[0][1] = 0;
+        projMatrix.M[0][2] = 2.0f * ((width - 1.0f * cx) / width) - 1.0f;
+        projMatrix.M[0][3] = 0;
+
+        projMatrix.M[1][0] = 0;
+        projMatrix.M[1][1] = 1.0 / tan(vfovrad * 0.5f);
+        projMatrix.M[1][2] = -(2.0f * ((height - 1.0f * cy) / height) - 1.0f);
+        projMatrix.M[1][3] = 0;
+        
+        projMatrix.M[2][0] = 0;
+        projMatrix.M[2][1] = 0;
+        projMatrix.M[2][2] = -(FarPlane + NearPlane) / (FarPlane - NearPlane);
+        projMatrix.M[2][3] = -(2.0f * FarPlane * NearPlane) / (FarPlane - NearPlane);
+
+        projMatrix.M[3][0] = 0;
+        projMatrix.M[3][1] = 0;
+        projMatrix.M[3][2] = -1;
+        projMatrix.M[3][3] = 0.0f;
+             
+        capture->CustomProjectionMatrix = projMatrix;
+    }
+
+    capture->ShowFlags.SetTemporalAA(true);
     updateCameraPostProcessingSetting(capture->PostProcessSettings, setting);
 }
 
