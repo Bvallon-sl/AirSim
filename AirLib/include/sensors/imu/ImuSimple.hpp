@@ -25,6 +25,26 @@ namespace airlib
 
             gyro_bias_stability_norm = params_.gyro.bias_stability / sqrt(params_.gyro.tau);
             accel_bias_stability_norm = params_.accel.bias_stability / sqrt(params_.accel.tau);
+
+            const auto& json = setting.settings;
+            float gyro_random_walk = json.getFloat("GyroRandomWalk", Utils::nan<float>());
+            if (!std::isnan(gyro_random_walk)) {
+                gyro_bias_stability_norm = gyro_random_walk * M_PIf / 180;
+            }
+            float accel_random_walk= json.getFloat("AccelRandomWalk", Utils::nan<float>());
+            if (!std::isnan(accel_random_walk)) {
+                accel_bias_stability_norm = accel_random_walk;
+            }
+
+            float angular_noise_density = json.getFloat("AngularNoiseDensity", Utils::nan<float>());
+            if (!std::isnan(angular_noise_density)) {
+                params_.gyro.arw = angular_noise_density * M_PIf / 180;
+            }
+
+            float accel_noise_density = json.getFloat("AccelNoiseDensity", Utils::nan<float>());
+            if (!std::isnan(accel_noise_density)) {
+                params_.accel.vrw = accel_noise_density;
+            }
         }
 
         //*** Start: UpdatableState implementation ***//
@@ -48,6 +68,18 @@ namespace airlib
 
         virtual ~ImuSimple() = default;
 
+        const float getGyroBiasStabilityNorm() const {
+            return gyro_bias_stability_norm;
+        }
+
+        const float getAccelBiasStabilityNorm() const {
+            return accel_bias_stability_norm;
+        }
+
+        const ImuSimpleParams getIMUParams() const {
+            return params_;
+        }
+
     private: //methods
         void updateOutput()
         {
@@ -59,10 +91,7 @@ namespace airlib
             output.orientation = ground_truth.kinematics->pose.orientation;
 
             //acceleration is in world frame so transform to body frame
-            output.linear_acceleration = VectorMath::transformToBodyFrame(output.linear_acceleration,
-                                                                          ground_truth.kinematics->pose.orientation,
-                                                                          true);
-
+            output.linear_acceleration = VectorMath::transformToBodyFrame(output.linear_acceleration, ground_truth.kinematics->pose.orientation, true);
             //add noise
             addNoise(output.linear_acceleration, output.angular_velocity);
             // TODO: Add noise in orientation?

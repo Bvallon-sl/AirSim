@@ -54,7 +54,6 @@ namespace airlib
         virtual Pose getPose() const = 0;
         virtual FTransform getUUPose() const = 0;
         virtual void setPose(const Pose& pose, bool ignore_collision) = 0;
-        virtual void setUUPose(const FTransform& pose, bool ignore_collision) = 0;
         virtual const Kinematics::State* getGroundTruthKinematics() const = 0;
         virtual void setKinematics(const Kinematics::State& state, bool ignore_collision) = 0;
         virtual const msr::airlib::Environment* getGroundTruthEnvironment() const = 0;

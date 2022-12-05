@@ -4,6 +4,7 @@
 #ifndef airsim_core_AirSimSettings_hpp
 #define airsim_core_AirSimSettings_hpp
 
+#include "ZEDConfigParser.h"
 #include "CommonStructs.hpp"
 #include "ImageCaptureBase.hpp"
 #include "Settings.hpp"
@@ -144,6 +145,12 @@ namespace airlib
 
             unsigned int width = 256, height = 144; //960 X 540
             float fov_degrees = Utils::nan<float>(); //90.0f
+            int serial_number = 510;
+            float fx = 700;
+            float fy = 700;
+            float cx = 640;
+            float cy = 360;
+            float baseline = 0.12f;
             int auto_exposure_method = -1; //histogram
             float auto_exposure_speed = Utils::nan<float>(); // 100.0f;
             float auto_exposure_bias = Utils::nan<float>(); // 0;
@@ -1058,6 +1065,34 @@ namespace airlib
             capture_setting.width = settings_json.getInt("Width", capture_setting.width);
             capture_setting.height = settings_json.getInt("Height", capture_setting.height);
             capture_setting.fov_degrees = settings_json.getFloat("FOV_Degrees", capture_setting.fov_degrees);
+            /*
+            if (settings_json.hasKey("fx")) {
+                float fx = settings_json.getFloat("fx", capture_setting.fx);
+                capture_setting.fx = fx;
+                capture_setting.fov_degrees = (2 * atan(capture_setting.width / (2 * fx))) * 180 / M_PI;
+            }
+            if (settings_json.hasKey("fy")) {
+                float fy = settings_json.getFloat("fy", capture_setting.fy);
+                capture_setting.fy = fy;
+            }
+            */
+
+            if (settings_json.hasKey("SerialNumber")) {
+            
+                capture_setting.serial_number = settings_json.getInt("SerialNumber", capture_setting.serial_number);
+                FString fconfig(FString::FromInt(capture_setting.serial_number));
+                UE_LOG(LogTemp, Warning, TEXT("Loading config : %s"), *fconfig);
+
+                std::string config = "SN" + std::to_string(capture_setting.serial_number);
+                ZEDConfigParser::CalibrationProfile calib_profile = ZEDConfigParser::getConfigFromZEDProfile(config, capture_setting.width);
+                capture_setting.fx = calib_profile.fx;
+                capture_setting.fy = calib_profile.fy;
+                capture_setting.cx = calib_profile.cx;
+                capture_setting.cy = calib_profile.cy;
+                capture_setting.baseline = calib_profile.baseline;
+                capture_setting.fov_degrees = (2 * atan(capture_setting.width / (2 * capture_setting.fx))) * 180 / M_PI;
+            }
+
             capture_setting.auto_exposure_speed = settings_json.getFloat("AutoExposureSpeed", capture_setting.auto_exposure_speed);
             capture_setting.auto_exposure_bias = settings_json.getFloat("AutoExposureBias", capture_setting.auto_exposure_bias);
             capture_setting.auto_exposure_max_brightness = settings_json.getFloat("AutoExposureMaxBrightness", capture_setting.auto_exposure_max_brightness);
